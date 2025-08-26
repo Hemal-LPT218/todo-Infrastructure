@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Stack for RDS
+
+## Stack Parameters ##
+Parameters:
+  DBName:
+    Type: String
+    Default: tododb
+    Description: Name of the initial MySQL database
+
+  DBUsername:
+    Type: String
+    Default: admin
+    Description: Master username for the database
+
+  DBPassword:
+    NoEcho: true
+    Type: String
+    Default: TodoAppPass123!
+    MinLength: 8
+    Description: Master password for the database
+
+  VpcSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing security group to allow DB access
+
+  Subnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet ID for RDS (in your VPC)
+
+  Subnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Another subnet ID for RDS (different AZ recommended)
+
+  DBCredentialsSecret:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:730335183789:secret:todo-db-credentials-r50p22
+    Description: ARN of the secret
+
+## Stack Resources ##
+Resources:
+  ## RDS Resources ##
+  TodoDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for Aurora cluster
+      SubnetIds:
+        - !Ref Subnet1
+        - !Ref Subnet2
+
+  TodoDBCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.05.2"
+      DatabaseName: !Ref DBName
+      MasterUsername:
+        !Join [
+          "",
+          [
+            "{{resolve:secretsmanager:",
+            !Ref DBCredentialsSecret,
+            ":SecretString:username}}",
+          ],
+        ]
+      MasterUserPassword:
+        !Join [
+          "",
+          [
+            "{{resolve:secretsmanager:",
+            !Ref DBCredentialsSecret,
+            ":SecretString:password}}",
+          ],
+        ]
+      DBSubnetGroupName: !Ref TodoDBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref VpcSecurityGroup
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: 03:00-04:00
+      DeletionProtection: false
+      StorageEncrypted: true
+
+  TodoDBInstance1:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: db.t3.medium 
+      Engine: aurora-mysql
+      DBClusterIdentifier: !Ref TodoDBCluster
+      PubliclyAccessible: false 
+    DependsOn: TodoDBCluster
+
+## Stack Outputs ##
+Outputs:
+  DBEndpoint:
+    Description: "JDBC connection string for the database"
+    Value: !GetAtt TodoDBInstance1.Endpoint.Address
+
+  DBName:
+    Description: "Name of the database"
+    Value: !Ref DBName
+
+  DBPort:
+    Description: "Port of the database"
+    Value: !GetAtt TodoDBInstance1.Endpoint.Port
+
+  TodoDBClusterId:
+    Description: "ID of the database cluster"
+    Value: !Ref TodoDBCluster

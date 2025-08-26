@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudWatch Monitoring for ALB, EC2 (ASG), and RDS Aurora"
+
+Parameters:
+  AlarmEmail:
+    Type: String
+    Description: Email address to receive CloudWatch alarms
+  MyAutoScalingGroup:
+    Type: String
+    Description: ASG logical ID
+  MyAuroraCluster:
+    Type: String
+    Description: Aurora Cluster ID
+  MyALB:
+    Type: String
+    Description: ALB logical ID
+
+Resources:
+  ##########################################
+  # SNS Topic for Alarms
+  ##########################################
+  AlarmSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: "MonitoringAlarms"
+      Subscription:
+        - Endpoint: !Ref AlarmEmail
+          Protocol: email
+
+  ##########################################
+  # CloudWatch Log Groups
+  ##########################################
+  EC2LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "/ec2/asg"
+      RetentionInDays: 7
+
+  ALBLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "/alb/access"
+      RetentionInDays: 7
+
+  RDSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "/rds/aurora-mysql"
+      RetentionInDays: 7
+
+  ##########################################
+  # CloudWatch Alarms
+  ##########################################
+  # EC2 High CPU Alarm (applies to all instances in ASG)
+  EC2HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "HighCPU-EC2"
+      AlarmDescription: "Alarm if EC2 CPU > 70% for 5 minutes"
+      Namespace: "AWS/EC2"
+      MetricName: "CPUUtilization"
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 70
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MyAutoScalingGroup # Replace with your ASG logical ID
+      AlarmActions:
+        - !Ref AlarmSNSTopic
+      OKActions:
+        - !Ref AlarmSNSTopic
+
+  # RDS High CPU Alarm
+  RDSHighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "HighCPU-RDS"
+      AlarmDescription: "Alarm if Aurora CPU > 80% for 5 minutes"
+      Namespace: "AWS/RDS"
+      MetricName: "CPUUtilization"
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref MyAuroraCluster # Replace with your Aurora Cluster ID
+      AlarmActions:
+        - !Ref AlarmSNSTopic
+      OKActions:
+        - !Ref AlarmSNSTopic
+
+  # ALB 5XX Errors Alarm
+  ALB5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "ALB-5XX-Errors"
+      AlarmDescription: "Alarm if ALB returns too many 5XX errors"
+      Namespace: "AWS/ApplicationELB"
+      MetricName: "HTTPCode_ELB_5XX_Count"
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref MyALB # Replace with your ALB logical ID
+      AlarmActions:
+        - !Ref AlarmSNSTopic
+      OKActions:
+        - !Ref AlarmSNSTopic
+
+  ##########################################
+  # CloudWatch Dashboard
+  ##########################################
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: "InfraMonitoring"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${MyAutoScalingGroup}" ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "EC2 CPU Utilization",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/RDS", "CPUUtilization", "DBClusterIdentifier", "${MyAuroraCluster}" ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "RDS Aurora CPU Utilization",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApplicationELB", "RequestCount", "LoadBalancer", "${MyALB}" ],
+                  [ "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", "LoadBalancer", "${MyALB}" ]
+                ],
+                "region": "${AWS::Region}",
+                "title": "ALB Requests & 5XX Errors",
+                "view": "timeSeries",
+                "stacked": false
+              }
+            }
+          ]
+        }
+
+Outputs:
+  DashboardName:
+    Description: "CloudWatch Dashboard Name"
+    Value: !Ref MonitoringDashboard
+
+  AlarmSNSTopicArn:
+    Description: "SNS Topic ARN for alarms"
+    Value: !Ref AlarmSNSTopic

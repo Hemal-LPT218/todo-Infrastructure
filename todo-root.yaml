@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Nested stack for custom VPC setup, security groups, RDS, Roles, and CodePipeline"
+
+## Stack Parameters ##
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetCidr1:
+    Type: String
+    Default: 10.0.1.0/24
+  PublicSubnetCidr2:
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnetCidr1:
+    Type: String
+    Default: 10.0.3.0/24
+  PrivateSubnetCidr2:
+    Type: String
+    Default: 10.0.4.0/24
+  ConnectionArn:
+    Type: String
+    Default: arn:aws:codeconnections:ap-south-1:730335183789:connection/e1b46677-0885-4a3c-9df2-5a6caefb6acb
+  CodePipelineBucket:
+    Type: String
+    Default: codepipeline-us-east-1-f3de767da42b-4a7e-bd92-34e343e25504
+  RepositoryUsername:
+    Type: String
+    Default: Hemal-LPT218
+  BackendRepositoryName:
+    Type: String
+    Default: todo-backend
+  FrontendRepositoryName:
+    Type: String
+    Default: todo-frontend
+  GitHubBranch:
+    Type: String
+    Default: main
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: EC2 instance type for backend
+  PORT:
+    Type: String
+    Default: 3000
+  DBCredentialsSecret:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:730335183789:secret:todo-db-credentials-r50p22
+    Description: Master password for the database
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+  AlarmEmail:
+    Type: String
+    Default: hemal@yopmail.com
+    Description: Email address to receive CloudWatch alarms
+
+Mappings:
+  RegionToAMI:
+    us-east-1:
+      AMI: ami-0c02fb55956c7d316
+    ap-south-1:
+      AMI: ami-0670cfc6f9b8f6c1e
+
+## Stack Resources ##
+Resources:
+  ## Nested Stack Resources ##
+  VpcStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-vpc.yaml
+      Parameters:
+        VpcCidr: !Ref VpcCidr
+        PublicSubnetCidr1: !Ref PublicSubnetCidr1
+        PublicSubnetCidr2: !Ref PublicSubnetCidr2
+        PrivateSubnetCidr1: !Ref PrivateSubnetCidr1
+        PrivateSubnetCidr2: !Ref PrivateSubnetCidr2
+
+  SecurityGroupStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-security-group.yaml
+      Parameters:
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+
+  RdsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-rds.yaml
+      Parameters:
+        Subnet1: !GetAtt VpcStack.Outputs.PrivateSubnetId1
+        Subnet2: !GetAtt VpcStack.Outputs.PrivateSubnetId2
+        VpcSecurityGroup: !GetAtt SecurityGroupStack.Outputs.TodoDBSecurityGroupId
+        DBCredentialsSecret: !Ref DBCredentialsSecret
+
+  RolesStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-roles.yaml
+      Parameters:
+        ConnectionArn: !Ref ConnectionArn
+        CodePipelineBucket: !Ref CodePipelineBucket
+        DBCredentialsSecret: !Ref DBCredentialsSecret
+
+  BackendPipelineStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-backend-pipeline.yaml
+      Parameters:
+        InstanceType: !Ref InstanceType
+        ConnectionArn: !Ref ConnectionArn
+        RepositoryName: !Sub "${RepositoryUsername}/${BackendRepositoryName}"
+        GitHubBranch: !Ref GitHubBranch
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+        SubnetPublicId1: !GetAtt VpcStack.Outputs.PublicSubnetId1
+        SubnetPublicId2: !GetAtt VpcStack.Outputs.PublicSubnetId2
+        SubnetPrivateId1: !GetAtt VpcStack.Outputs.PrivateSubnetId1
+        SubnetPrivateId2: !GetAtt VpcStack.Outputs.PrivateSubnetId2
+        SecuritySSHGroup: !GetAtt SecurityGroupStack.Outputs.SecuritySSHGroupId
+        SecurityHTTPGroup: !GetAtt SecurityGroupStack.Outputs.SecurityHTTPGroupId
+        ALBSecurityGroup: !GetAtt SecurityGroupStack.Outputs.ALBSecurityGroupId
+        InstanceProfileArn: !GetAtt RolesStack.Outputs.InstanceProfileArn
+        DBEndpoint: !GetAtt RdsStack.Outputs.DBEndpoint
+        DBName: !GetAtt RdsStack.Outputs.DBName
+        CodeDeployRoleArn: !GetAtt RolesStack.Outputs.CodeDeployRoleArn
+        CodeBuildRoleArn: !GetAtt RolesStack.Outputs.CodeBuildRoleArn
+        CodePipelineRoleArn: !GetAtt RolesStack.Outputs.CodePipelineRoleArn
+        PORT: !Ref PORT
+        DBCredentialsSecret: !Ref DBCredentialsSecret
+        KeyName: !Ref KeyName
+
+  CloudFrontStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-cloudfront.yaml
+      Parameters:
+        AlbDomainName: !GetAtt BackendPipelineStack.Outputs.LoadBalancerDNS
+
+  FrontendPipelineStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-frontend-pipeline.yaml
+      Parameters:
+        ConnectionArn: !Ref ConnectionArn
+        RepositoryName: !Sub "${RepositoryUsername}/${FrontendRepositoryName}"
+        GitHubBranch: !Ref GitHubBranch
+        ApiEndpoint: !GetAtt CloudFrontStack.Outputs.ApiCloudFrontDistributionDomain
+        FrontendS3Bucket: !GetAtt CloudFrontStack.Outputs.FrontendS3Bucket
+        CodePipelineBucket: !Ref CodePipelineBucket
+        CloudFrontDistributionId: !GetAtt CloudFrontStack.Outputs.FrontendCloudFrontDistributionId
+        FrontendCodePipelineServiceRoleArn: !GetAtt RolesStack.Outputs.FrontendCodePipelineServiceRoleArn
+        FrontendCodeBuildServiceRoleArn: !GetAtt RolesStack.Outputs.FrontendCodeBuildServiceRoleArn
+
+  CloudwatchMonitoringStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-cloudWatch-monitoring.yaml
+      Parameters:
+        AlarmEmail: !Ref AlarmEmail
+        MyAutoScalingGroup: !GetAtt BackendPipelineStack.Outputs.AppAutoScalingGroupId
+        MyAuroraCluster: !GetAtt RdsStack.Outputs.TodoDBClusterId
+        MyALB: !GetAtt BackendPipelineStack.Outputs.AppLoadBalancerId
+
+## Stack Outputs ##
+Outputs:
+  DBEndpoint:
+    Value: !GetAtt RdsStack.Outputs.DBEndpoint
+
+  LoadBalancerDNS:
+    Value: !GetAtt BackendPipelineStack.Outputs.LoadBalancerDNS
+
+  CodePipelineURL:
+    Value: !GetAtt BackendPipelineStack.Outputs.CodePipelineURL
+
+  ApiCloudFrontDistributionDomain:
+    Value: !GetAtt CloudFrontStack.Outputs.ApiCloudFrontDistributionDomain
+
+  FrontendCloudFrontDomain:
+    Value: !GetAtt CloudFrontStack.Outputs.FrontendCloudFrontDomain

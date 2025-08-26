@@ -1,0 +1,359 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Stack for Backend Resources with CodePipeline
+
+## Stack Parameters ##
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+  ConnectionArn:
+    Type: String
+    Default: arn:aws:codeconnections:ap-south-1:730335183789:connection/e1b46677-0885-4a3c-9df2-5a6caefb6acb
+  RepositoryName:
+    Type: String
+    Default: Hemal-LPT218/todo-backend
+  CodePipelineBucket:
+    Type: String
+    Default: codepipeline-us-east-1-f3de767da42b-4a7e-bd92-34e343e25504
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for ALB/EC2
+  SubnetPublicId1:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for EC2
+  SubnetPublicId2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for EC2
+  SubnetPrivateId1:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for RDS
+  SubnetPrivateId2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for RDS
+  SecuritySSHGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group for SSH
+  SecurityHTTPGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group for HTTP
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group for ALB
+  InstanceProfileArn:
+    Type: String
+    Description: IAM instance profile
+  DBEndpoint:
+    Type: String
+  DBName:
+    Type: String
+    Default: todo
+  CodeDeployRoleArn:
+    Type: String
+  CodeBuildRoleArn:
+    Type: String
+  CodePipelineRoleArn:
+    Type: String
+  PORT:
+    Type: String
+  DBCredentialsSecret:
+    Type: String
+  GitHubBranch:
+    Type: String
+    Default: main
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    
+## Stack Mappings ##
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0de716d6197524dd9
+    ap-south-1:
+      AMI: ami-0144277607031eca2
+
+## Stack Resources ##
+Resources:
+  ## EC2 Launch Template ##
+  AppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !FindInMap [RegionMap, !Ref AWS::Region, AMI]
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        IamInstanceProfile:
+          Arn: !Ref InstanceProfileArn
+        SecurityGroupIds:
+          - !Ref SecuritySSHGroup
+          - !Ref SecurityHTTPGroup
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            # Update system
+            yum update -y
+
+            # Install Node.js
+            curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+            yum install -y nodejs git
+
+            # Install PM2 globally
+            npm install -g pm2
+
+            # Install CodeDeploy agent
+            yum install -y ruby wget
+            cd /home/ec2-user
+            wget https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install
+            chmod +x ./install
+            ./install auto
+            systemctl start codedeploy-agent
+            systemctl enable codedeploy-agent
+
+            # Create app directory
+            mkdir -p /home/ec2-user/app
+            cd /home/ec2-user/app
+
+            yum install -y jq awscli
+
+            # Fetch secret from Secrets Manager
+            SECRET_JSON=$(aws secretsmanager get-secret-value \
+              --secret-id ${DBCredentialsSecret} \
+              --query SecretString \
+              --output text \
+              --region ${AWS::Region})
+
+            DB_USER=$(echo $SECRET_JSON | jq -r .username)
+            DB_PASS=$(echo $SECRET_JSON | jq -r .password)
+
+            # Create .env for DB testing
+            cat <<EOF > /home/ec2-user/app/.env
+            NODE_ENV=development
+            DATABASE_URL=mysql://$DB_USER:$DB_PASS@${DBEndpoint}:3306/${DBName}
+            PORT=${PORT}
+            EOF
+
+            # Set permissions
+            chown -R ec2-user:ec2-user /home/ec2-user/app
+            chmod 600 /home/ec2-user/app/.env
+
+            # Install CloudWatch Agent
+            yum install -y amazon-cloudwatch-agent
+
+            # Create CloudWatch Agent config file
+            cat <<EOF > /opt/aws/amazon-cloudwatch-agent/bin/config.json
+            {
+              "logs": {
+                "logs_collected": {
+                  "files": {
+                    "collect_list": [
+                      {
+                        "file_path": "/home/ec2-user/app/dist/logs/app.log",
+                        "log_group_name": "/todo-backend/app",
+                        "log_stream_name": "{instance_id}-app-log",
+                        "timestamp_format": "%Y-%m-%d %H:%M:%S"
+                      },
+                      {
+                        "file_path": "/var/log/messages",
+                        "log_group_name": "/todo-backend/system",
+                        "log_stream_name": "{instance_id}-syslog"
+                      },
+                      {
+                        "file_path": "/home/ec2-user/.pm2/logs/todo-out.log",
+                        "log_group_name": "/todo-backend/pm2",
+                        "log_stream_name": "{instance_id}-stdout"
+                      },
+                      {
+                        "file_path": "/home/ec2-user/.pm2/logs/todo-error.log",
+                        "log_group_name": "/todo-backend/pm2",
+                        "log_stream_name": "{instance_id}-stderr"
+                      }
+                    ]
+                  }
+                },
+                "log_stream_name": "default",
+                "force_flush_interval": 15
+              }
+            }
+            EOF
+
+            # Start CloudWatch Agent
+            /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+              -a fetch-config \
+              -m ec2 \
+              -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json \
+              -s
+
+  ## ALB ##
+  AppLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: AppLoadBalancer
+      Subnets:
+        - !Ref SubnetPublicId1
+        - !Ref SubnetPublicId2
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Scheme: internet-facing
+      Type: application
+
+  AppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: AppTargetGroup
+      Port: 3000
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckPath: /health
+      UnhealthyThresholdCount: 5
+
+  AppListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref AppLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AppTargetGroup
+
+  ## ASG ##
+  AppAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref SubnetPrivateId1
+        - !Ref SubnetPrivateId2
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplate
+        Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
+      TargetGroupARNs:
+        - !Ref AppTargetGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ASG"
+          PropagateAtLaunch: true
+      HealthCheckType: ELB
+
+  ## CodeDeploy ##
+  CodeDeployApp:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: App
+      ComputePlatform: "Server"
+
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApp
+      DeploymentGroupName: AppDeploymentGroup
+      ServiceRoleArn: !Ref CodeDeployRoleArn
+      AutoRollbackConfiguration:
+        Enabled: true
+        Events:
+          - DEPLOYMENT_FAILURE
+          - DEPLOYMENT_STOP_ON_ALARM
+      AutoScalingGroups:
+        - !Ref AppAutoScalingGroup
+      LoadBalancerInfo:
+        TargetGroupInfoList:
+          - Name: !GetAtt AppTargetGroup.TargetGroupName
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+
+  ## CodeBuild ##
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: CodeBuildProject
+      ServiceRole: !Ref CodeBuildRoleArn
+      Source:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:6.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        ImagePullCredentialsType: CODEBUILD
+      Artifacts:
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 15
+
+  ## CodePipeline ##
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    DependsOn:
+      - AppAutoScalingGroup
+    Properties:
+      Name: CodePipeline
+      RoleArn: !Ref CodePipelineRoleArn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref CodePipelineBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceArtifact
+              Configuration:
+                ConnectionArn: !Ref ConnectionArn
+                FullRepositoryId: !Ref RepositoryName
+                BranchName: !Ref GitHubBranch
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+        - Name: ManualApproval
+          Actions:
+            - Name: ManualApproval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: 1
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeploy
+                Version: 1
+              InputArtifacts:
+                - Name: BuildArtifact
+              Configuration:
+                ApplicationName: !Ref CodeDeployApp
+                DeploymentGroupName: !Ref CodeDeployDeploymentGroup
+
+## Stack Outputs ##
+Outputs:
+  CodePipelineBucket:
+    Value: !Ref CodePipelineBucket
+
+  CodePipelineURL:
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${CodePipeline}/view?region=${AWS::Region}"
+
+  LoadBalancerDNS:
+    Value: !GetAtt AppLoadBalancer.DNSName
+
+  AppAutoScalingGroupId:
+    Value: !Ref AppAutoScalingGroup
+
+  AppLoadBalancerId:
+    Value: !Ref AppLoadBalancer

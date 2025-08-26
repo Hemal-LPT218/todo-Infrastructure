@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CodePipeline for React App Deployment with GitHub, S3, and CloudFront
+
+## Stack Parameters ##
+Parameters:
+  ConnectionArn:
+    Type: String
+    Description: ARN of the CodeStar Connection to GitHub
+  RepositoryName:
+    Type: String
+    Description: GitHub repo in format "owner/repo"
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: GitHub branch name
+  ApiEndpoint:
+    Type: String
+    Description: API endpoint for React app
+  FrontendS3Bucket:
+    Type: String
+    Description: S3 bucket for React app deployment
+  CodePipelineBucket:
+    Type: String
+    Default: codepipeline-us-east-1-f3de767da42b-4a7e-bd92-34e343e25504
+  CloudFrontDistributionId:
+    Type: String
+    Description: CloudFront Distribution ID
+  FrontendCodePipelineServiceRoleArn:
+    Type: String
+    Description: ARN of the CodePipeline service role
+  FrontendCodeBuildServiceRoleArn:
+    Type: String
+    Description: ARN of the CodeBuild service role
+
+## Stack Resources ##
+Resources:
+  ## Build Project for React App ##
+  ReactBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      ServiceRole: !Ref FrontendCodeBuildServiceRoleArn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: API_ENDPOINT
+            Value: !Ref ApiEndpoint
+      Source:
+        Type: CODEPIPELINE
+      Cache:
+        Type: NO_CACHE
+      TimeoutInMinutes: 20
+
+  ## Build Project for CloudFront Invalidation ##
+  CloudFrontInvalidationProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      ServiceRole: !Ref FrontendCodeBuildServiceRoleArn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:6.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: CLOUDFRONT_ID
+            Value: !Ref CloudFrontDistributionId
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - echo "Invalidating CloudFront cache..."
+                - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths "/*"
+      TimeoutInMinutes: 10
+
+  ## Code Pipeline for React App ##
+  ReactPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !Ref FrontendCodePipelineServiceRoleArn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref CodePipelineBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceCode
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ConnectionArn: !Ref ConnectionArn
+                FullRepositoryId: !Ref RepositoryName
+                BranchName: !Ref GitHubBranch
+
+        - Name: Build
+          Actions:
+            - Name: BuildReactApp
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: !Ref ReactBuildProject
+
+        - Name: Approval
+          Actions:
+            - Name: ManualApproval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: 1
+
+        - Name: Deploy
+          Actions:
+            - Name: DeployToS3
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: S3
+                Version: 1
+              InputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                BucketName: !Ref FrontendS3Bucket
+                Extract: true
+
+            - Name: InvalidateCloudFront
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              InputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: !Ref CloudFrontInvalidationProject
+              RunOrder: 2
+
+## Stack Outputs ##
+Outputs:
+  PipelineName:
+    Value: !Ref ReactPipeline
+    Description: CodePipeline Name

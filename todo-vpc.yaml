@@ -1,0 +1,203 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Stack for custom VPC setup
+
+## Stack Parameters ##
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetCidr1:
+    Type: String
+    Default: 10.0.1.0/24
+  PublicSubnetCidr2:
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnetCidr1:
+    Type: String
+    Default: 10.0.3.0/24
+  PrivateSubnetCidr2:
+    Type: String
+    Default: 10.0.4.0/24
+
+## Stack Resources ##
+Resources:
+  ## VPC Resources ##
+  TodoVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: CustomVPC
+
+  ## Subnet Resources ##
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TodoVPC
+      CidrBlock: !Ref PublicSubnetCidr1
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref "AWS::Region"
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: CustomVPC-PublicSubnet1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TodoVPC
+      CidrBlock: !Ref PublicSubnetCidr2
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref "AWS::Region"
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: CustomVPC-PublicSubnet2
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TodoVPC
+      CidrBlock: !Ref PrivateSubnetCidr1
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: Name
+          Value: CustomVPC-PrivateSubnet1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TodoVPC
+      CidrBlock: !Ref PrivateSubnetCidr2
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: Name
+          Value: CustomVPC-PrivateSubnet2
+
+  ## Internet Gateway Resources ##
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: CustomVPC-IGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref TodoVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  ## Route Table Resources ##
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TodoVPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  ## NAT Resources ##
+  NatEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: MyAppNAT
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TodoVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  ## VPC Endpoint Resources ##
+  S3VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId: !Ref TodoVPC
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+        - !Ref PublicRouteTable
+
+## Outputs ##
+Outputs:
+  VpcId:
+    Value: !Ref TodoVPC
+    Export:
+      Name: CustomVPCId
+  PublicSubnetId1:
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: CustomPublicSubnetId1
+  PublicSubnetId2:
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: CustomPublicSubnetId2
+  PrivateSubnetId1:
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: CustomPrivateSubnetId1
+  PrivateSubnetId2:
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: CustomPrivateSubnetId2

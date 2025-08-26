@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Stack for security groups
+
+## Stack Parameters ##
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for ALB/EC2
+
+## Stack Resources ##
+Resources:
+  ## Security Group for DB ##
+  TodoDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow MySQL access for Aurora cluster
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref SecuritySSHGroup
+
+  ## Security Group for EC2 ##
+  SecuritySSHGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow SSH access on EC2 instance"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  SecurityHTTPGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow HTTP access on EC2 instance"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+  ## Security Group for ALB ##
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow HTTP access on ALB"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+
+## Stack Outputs ##
+Outputs:
+  SecuritySSHGroupId:
+    Description: SSH security group ID
+    Value: !Ref SecuritySSHGroup
+
+  SecurityHTTPGroupId:
+    Description: HTTP security group ID
+    Value: !Ref SecurityHTTPGroup
+
+  TodoDBSecurityGroupId:
+    Description: Aurora security group ID
+    Value: !Ref TodoDBSecurityGroup
+
+  ALBSecurityGroupId:
+    Description: ALB security group ID
+    Value: !Ref ALBSecurityGroup

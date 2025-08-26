@@ -1,0 +1,376 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CodePipeline -> CodeBuild -> ManualApproval -> CodeDeploy to EC2 AutoScalingGroup behind ALB
+  Deploys Node.js TypeScript TODO backend integrated with Aurora (MySQL compatible).
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for ALB/EC2
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two subnets in different AZs for ALB/ASG
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 KeyPair for SSH (optional - set to blank to skip SSH)
+    Default: ""
+  ArtifactBucketName:
+    Type: String
+    Default: "codepipeline-us-east-1-f3de767da42b-4a7e-bd92-34e343e25504"
+    Description: Existing S3 bucket name for pipeline artifacts
+  CodeStarConnectionArn:
+    Type: String
+    Default: "arn:aws:codeconnections:ap-south-1:730335183789:connection/e1b46677-0885-4a3c-9df2-5a6caefb6acb"
+    Description: CodeStar connection ARN for GitHub (e.g. arn:aws:codestar-connections:region:acct:connection/...)
+  GitHubRepository:
+    Type: String
+    Default: Hemal-LPT218/todo-backend
+    Description: GitHub repo "owner/repo" e.g. Hemal-LPT218/todo-backend
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: Branch to build
+  DBEndpoint:
+    Type: String
+    Description: Aurora cluster endpoint (host only, e.g. todo-db.cluster-xxxxxx.region.rds.amazonaws.com)
+  DBName:
+    Type: String
+    Default: tododb
+  DBUser:
+    Type: String
+    Default: admin
+  DBPassword:
+    Type: String
+    Default: TodoAppPass123!
+    NoEcho: true
+    Description: Database password (use Secrets Manager or SSM in prod)
+  InstanceType:
+    Type: String
+    Default: t2.micro
+  DesiredCapacity:
+    Type: Number
+    Default: 1
+    MinValue: 1
+  MaxSize:
+    Type: Number
+    Default: 2
+    MinValue: 1
+
+Mappings:
+  RegionToAMI:
+    # Amazon Linux 2 AMI (example). You may change to a specific AMI per region.
+    us-east-1:
+      AMI: ami-0c02fb55956c7d316
+    ap-south-1:
+      AMI: ami-0670cfc6f9b8f6c1e
+
+Resources:
+  ### Stack Resources ###
+  SecurityGroupStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/security-group.yaml
+      Parameters:
+        VpcId: !Ref VpcId
+
+  ### IAM ROLES (minimal) ###
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess
+      Policies:
+        - PolicyName: PipelineS3Access
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource:
+                  - !Sub arn:aws:s3:::${ArtifactBucketName}/*
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess # needed to upload artifacts to S3; narrow if needed
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: AccessSSMAndSecrets
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: "*"
+
+  CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+      Path: /
+
+  ### ALB ###
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !GetAtt SecurityGroupStack.Outputs.ALBSecurityGroupId
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: instance
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  ### Launch Template + AutoScalingGroup ###
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        ImageId: !FindInMap [RegionToAMI, !Ref "AWS::Region", AMI]
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        KeyName: !If [HasKeyPair, !Ref KeyName, !Ref "AWS::NoValue"]
+        SecurityGroupIds:
+          - !GetAtt SecurityGroupStack.Outputs.EC2SecurityGroupId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            yum update -y || true
+            # install Node.js 18 (Amazon Linux 2 example)
+            curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+            yum install -y nodejs git jq
+            # install CodeDeploy agent
+            yum install -y ruby wget
+            cd /home/ec2-user
+            region="${AWS::Region}"
+            # CodeDeploy agent install (Amazon Linux 2)
+            yum install -y aws-cli
+            # download and install codedeploy agent
+            cd /tmp
+            wget https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install -O /tmp/install
+            chmod +x /tmp/install
+            /tmp/install auto > /tmp/codedeploy_install.log 2>&1 || true
+            # create app directory
+            mkdir -p /var/www/todo
+            chown ec2-user:ec2-user /var/www/todo
+            # enable and start SSM agent if available
+            systemctl enable --now amazon-ssm-agent || true
+            # Install pm2 (optional) - app must provide start script
+            npm install -g pm2 || true
+            # export DB envs for use by app (replace or read from SSM/Secrets in prod)
+            echo "DATABASE_URL=mysql://${DBUser}:${DBPassword}@${DBEndpoint}:3306/${DBName}" > /var/www/todo/.env
+            chown ec2-user:ec2-user /var/www/todo/.env
+
+  EC2AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: !Ref SubnetIds
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+      MinSize: "1"
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      TargetGroupARNs:
+        - !Ref ALBTargetGroup
+      Tags:
+        - Key: Name
+          Value: todo-backend-ec2
+          PropagateAtLaunch: true
+
+  ### CodeDeploy Application & Deployment Group ###
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ComputePlatform: Server
+      ApplicationName: todo-backend-app
+
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentGroupName: todo-backend-dg
+      ServiceRoleArn: !GetAtt CodeDeployRole.Arn
+      AutoScalingGroups:
+        - !Ref EC2AutoScalingGroup
+      DeploymentConfigName: CodeDeployDefault.OneAtATime
+      Ec2TagFilters: [] # using ASG instead
+      LoadBalancerInfo:
+        ElbInfoList:
+          - Name: !Ref ALB
+      AlarmConfiguration:
+        Enabled: false
+
+  ### CodeBuild project (builds TypeScript, creates appspec & zip) ###
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: todo-backend-build
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:6.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: NODE_ENV
+            Value: production
+      Source:
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 30
+
+  ### CodePipeline with Source (CodeStar Connections) ###
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: todo-backend-pipeline
+      RoleArn: !GetAtt PipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucketName
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: !Ref GitHubRepository
+                BranchName: !Ref GitHubBranch
+                DetectChanges: true
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 1
+        - Name: ManualApproval
+          Actions:
+            - Name: Approval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: "1"
+              Configuration:
+                CustomData: "Approve deployment to EC2 (prod)"
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeploy
+                Version: "1"
+              InputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ApplicationName: !Ref CodeDeployApplication
+                DeploymentGroupName: !Ref CodeDeployDeploymentGroup
+              RunOrder: 1
+
+### Outputs ###
+Outputs:
+  OutputALB:
+    Description: ALB DNS name
+    Value: !GetAtt ALB.DNSName
+
+  OutputTargetGroup:
+    Description: ALB Target Group ARN
+    Value: !Ref ALBTargetGroup
+
+  OutputPipeline:
+    Description: CodePipeline name
+    Value: !Ref CodePipeline
+
+Conditions:
+  HasKeyPair: !Not [!Equals [!Ref KeyName, ""]]

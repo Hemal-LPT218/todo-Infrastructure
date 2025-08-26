@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFront Distribution for API with CORS and HTTPS support
+
+## Stack Parameters ##
+Parameters:
+  AlbDomainName:
+    Type: String
+    Description: The DNS name of your Application Load Balancer (e.g., apploadbalancer-xxxx.us-east-1.elb.amazonaws.com)
+
+## Stack Resources ##
+Resources:
+  ## ALB Origin for API CloudFront ##
+  ApiCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: ""
+        HttpVersion: http2
+        PriceClass: PriceClass_All
+
+        Origins:
+          - DomainName: !Ref AlbDomainName
+            Id: ApiALBOrigin
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+
+        DefaultCacheBehavior:
+          TargetOriginId: ApiALBOrigin
+          ViewerProtocolPolicy: https-only
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # Managed-AllViewerExceptHostHeader
+
+  ## S3 Bucket for Frontend ##
+  FrontendS3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      WebsiteConfiguration:
+        IndexDocument: index.html
+
+  ## S3 Origin for Frontend CloudFront ##
+  FrontendCloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: FrontendOAC
+        Description: Origin Access Control for CloudFront to S3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+        OriginAccessControlOriginType: s3
+
+  FrontendCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: FrontendS3Origin
+            DomainName: !Sub "${FrontendS3Bucket}.s3.${AWS::Region}.amazonaws.com"
+            S3OriginConfig: {}
+            OriginAccessControlId: !Ref FrontendCloudFrontOAC
+        DefaultCacheBehavior:
+          TargetOriginId: FrontendS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: false
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        PriceClass: PriceClass_All
+        HttpVersion: http2
+
+  ## S3 Bucket Policy for Frontend CloudFront ##
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${FrontendS3Bucket}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${FrontendCloudFrontDistribution}"
+
+## Stack Outputs ##
+Outputs:
+  ApiCloudFrontDistributionDomain:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt ApiCloudFrontDistribution.DomainName
+
+  FrontendCloudFrontDomain:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt FrontendCloudFrontDistribution.DomainName
+
+  FrontendCloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref FrontendCloudFrontDistribution
+
+  FrontendS3Bucket:
+    Description: S3 Bucket Name
+    Value: !Ref FrontendS3Bucket
