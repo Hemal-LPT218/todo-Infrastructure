@@ -67,7 +67,7 @@ Resources:
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-vpc.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-vpc.yaml
       Parameters:
         VpcCidr: !Ref VpcCidr
         PublicSubnetCidr1: !Ref PublicSubnetCidr1
@@ -78,14 +78,14 @@ Resources:
   SecurityGroupStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-security-group.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-security-group.yaml
       Parameters:
         VpcId: !GetAtt VpcStack.Outputs.VpcId
 
   RdsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-rds.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-rds.yaml
       Parameters:
         Subnet1: !GetAtt VpcStack.Outputs.PrivateSubnetId1
         Subnet2: !GetAtt VpcStack.Outputs.PrivateSubnetId2
@@ -95,7 +95,7 @@ Resources:
   RolesStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-roles.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-roles.yaml
       Parameters:
         ConnectionArn: !Ref ConnectionArn
         CodePipelineBucket: !Ref CodePipelineBucket
@@ -104,7 +104,7 @@ Resources:
   BackendPipelineStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-backend-pipeline.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-backend-pipeline.yaml
       Parameters:
         InstanceType: !Ref InstanceType
         ConnectionArn: !Ref ConnectionArn
@@ -131,14 +131,14 @@ Resources:
   CloudFrontStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-cloudfront.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-cloudfront.yaml
       Parameters:
         AlbDomainName: !GetAtt BackendPipelineStack.Outputs.LoadBalancerDNS
 
   FrontendPipelineStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-frontend-pipeline.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-frontend-pipeline.yaml
       Parameters:
         ConnectionArn: !Ref ConnectionArn
         RepositoryName: !Sub "${RepositoryUsername}/${FrontendRepositoryName}"
@@ -153,7 +153,7 @@ Resources:
   CloudwatchMonitoringStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3-testing-bucket-23.s3.ap-south-1.amazonaws.com/CloudForamtion/todo-cloudWatch-monitoring.yaml
+      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-cloudWatch-monitoring.yaml
       Parameters:
         AlarmEmail: !Ref AlarmEmail
         MyAutoScalingGroup: !GetAtt BackendPipelineStack.Outputs.AppAutoScalingGroupId
