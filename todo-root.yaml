@@ -29,10 +29,10 @@ Parameters:
     Default: Hemal-LPT218
   BackendRepositoryName:
     Type: String
-    Default: new-project
+    Default: todo-backend
   FrontendRepositoryName:
     Type: String
-    Default: new-project
+    Default: todo-frontend
   GitHubBranch:
     Type: String
     Default: main
