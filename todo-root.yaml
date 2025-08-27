@@ -95,11 +95,11 @@ Resources:
       TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-rds.yaml
       Parameters:
         Subnet1: !If
-          - IsSetupPrivateSubnet
+          - CreatePrivateSubnet
           - !GetAtt VpcStack.Outputs.PrivateSubnetId1
           - !GetAtt VpcStack.Outputs.PublicSubnetId1
         Subnet2: !If
-          - IsSetupPrivateSubnet
+          - CreatePrivateSubnet
           - !GetAtt VpcStack.Outputs.PrivateSubnetId2
           - !GetAtt VpcStack.Outputs.PublicSubnetId2
         VpcSecurityGroup: !GetAtt SecurityGroupStack.Outputs.TodoDBSecurityGroupId
@@ -127,11 +127,11 @@ Resources:
         SubnetPublicId1: !GetAtt VpcStack.Outputs.PublicSubnetId1
         SubnetPublicId2: !GetAtt VpcStack.Outputs.PublicSubnetId2
         SubnetPrivateId1: !If
-          - IsSetupPrivateSubnet
+          - CreatePrivateSubnet
           - !GetAtt VpcStack.Outputs.PrivateSubnetId1
           - !GetAtt VpcStack.Outputs.PublicSubnetId1
         SubnetPrivateId2: !If
-          - IsSetupPrivateSubnet
+          - CreatePrivateSubnet
           - !GetAtt VpcStack.Outputs.PrivateSubnetId2
           - !GetAtt VpcStack.Outputs.PublicSubnetId2
         SecuritySSHGroup: !GetAtt SecurityGroupStack.Outputs.SecuritySSHGroupId
