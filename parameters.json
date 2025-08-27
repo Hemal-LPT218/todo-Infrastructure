@@ -1,5 +1,6 @@
 {
   "Parameters": {
-    "KeyName": "us-east-1-key-pair"
+    "KeyName": "us-east-1-key-pair",
+    "IsSetupPrivateSubnet": true
   }
 }
