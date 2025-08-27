@@ -19,13 +19,13 @@ Parameters:
   #   MinLength: 8
   #   Description: Master password for the database
 
-  # VpcSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup::Id
-  #   Description: Existing security group to allow DB access
+  VpcSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing security group to allow DB access
 
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Description: VPC for RDS
+  # VpcId:
+  #   Type: AWS::EC2::VPC::Id
+  #   Description: VPC for RDS
 
   Subnet1:
     Type: AWS::EC2::Subnet::Id
@@ -41,16 +41,16 @@ Parameters:
     Description: ARN of the secret
 
 Resources:
-  TodoDBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allow MySQL access for Aurora cluster
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: 0.0.0.0/0
+  # TodoDBSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: Allow MySQL access for Aurora cluster
+  #     VpcId: !Ref VpcId
+  #     SecurityGroupIngress:
+  #       - IpProtocol: tcp
+  #         FromPort: 3306
+  #         ToPort: 3306
+  #         CidrIp: 0.0.0.0/0
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -89,7 +89,7 @@ Resources:
           ],
         ]
       VPCSecurityGroups:
-        - !Ref TodoDBSecurityGroup
+        - !Ref VpcSecurityGroup
       DBSubnetGroupName: !Ref DBSubnetGroup
       BackupRetentionPeriod: 7
       MultiAZ: false
@@ -170,3 +170,7 @@ Outputs:
   DBPort:
     Description: "Port of the database"
     Value: !GetAtt MyDBInstance.Endpoint.Port
+
+  TodoDBClusterId:
+    Description: "ID of the database cluster"
+    Value: !Ref MyDBInstance

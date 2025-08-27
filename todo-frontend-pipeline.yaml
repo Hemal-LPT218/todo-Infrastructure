@@ -41,7 +41,6 @@ Resources:
       ServiceRole: !Ref FrontendCodeBuildServiceRoleArn
       Artifacts:
         Type: CODEPIPELINE
-        BuildSpec: buildspec-frontend.yml
       Environment:
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:7.0
@@ -51,6 +50,7 @@ Resources:
             Value: !Ref ApiEndpoint
       Source:
         Type: CODEPIPELINE
+        # BuildSpec: buildspec-frontend.yml
       Cache:
         Type: NO_CACHE
       TimeoutInMinutes: 20

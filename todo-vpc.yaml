@@ -67,6 +67,7 @@ Resources:
 
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
+    Condition: CreatePrivateSubnet
     Properties:
       VpcId: !Ref TodoVPC
       CidrBlock: !Ref PrivateSubnetCidr1
@@ -79,6 +80,7 @@ Resources:
 
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
+    Condition: CreatePrivateSubnet
     Properties:
       VpcId: !Ref TodoVPC
       CidrBlock: !Ref PrivateSubnetCidr2
@@ -135,13 +137,13 @@ Resources:
   ## NAT Resources ##
   NatEIP:
     Type: AWS::EC2::EIP
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Properties:
       Domain: vpc
 
   NatGateway:
     Type: AWS::EC2::NatGateway
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Properties:
       AllocationId: !GetAtt NatEIP.AllocationId
       SubnetId: !Ref PublicSubnet1
@@ -151,7 +153,7 @@ Resources:
 
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Properties:
       VpcId: !Ref TodoVPC
       Tags:
@@ -160,7 +162,7 @@ Resources:
 
   PrivateRoute:
     Type: AWS::EC2::Route
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Properties:
       RouteTableId: !Ref PrivateRouteTable
       DestinationCidrBlock: 0.0.0.0/0
@@ -168,14 +170,14 @@ Resources:
 
   PrivateSubnetRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Properties:
       SubnetId: !Ref PrivateSubnet1
       RouteTableId: !Ref PrivateRouteTable
 
   PrivateSubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Properties:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
@@ -183,7 +185,7 @@ Resources:
   ## VPC Endpoint Resources ##
   S3VPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Properties:
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
       VpcId: !Ref TodoVPC
@@ -212,11 +214,11 @@ Outputs:
       Name: CustomPublicSubnetId2
   PrivateSubnetId1:
     Value: !Ref PrivateSubnet1
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Export:
       Name: CustomPrivateSubnetId1
   PrivateSubnetId2:
     Value: !Ref PrivateSubnet2
-    Condition: !Ref CreatePrivateSubnet
+    Condition: CreatePrivateSubnet
     Export:
       Name: CustomPrivateSubnetId2
