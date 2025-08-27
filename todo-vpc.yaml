@@ -19,7 +19,7 @@ Parameters:
     Type: String
     Default: 10.0.4.0/24
   IsSetupPrivateSubnet:
-    Type: Boolean
+    Type: String
     Default: false
     AllowedValues:
       - true
