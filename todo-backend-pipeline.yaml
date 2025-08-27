@@ -62,7 +62,7 @@ Parameters:
     Default: main
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
-    
+
 ## Stack Mappings ##
 Mappings:
   RegionMap:
@@ -270,7 +270,7 @@ Resources:
       ServiceRole: !Ref CodeBuildRoleArn
       Source:
         Type: CODEPIPELINE
-        BuildSpec: buildspec-backend.yml
+        # BuildSpec: buildspec-backend.yml
       Environment:
         Type: LINUX_CONTAINER
         Image: aws/codebuild/standard:6.0
