@@ -7,21 +7,25 @@ Parameters:
     Default: tododb
     Description: Name of the initial MySQL database
 
-  DBUsername:
-    Type: String
-    Default: admin
-    Description: Master username for the database
+  # DBUsername:
+  #   Type: String
+  #   Default: admin
+  #   Description: Master username for the database
 
-  DBPassword:
-    NoEcho: true
-    Type: String
-    Default: TodoAppPass123!
-    MinLength: 8
-    Description: Master password for the database
+  # DBPassword:
+  #   NoEcho: true
+  #   Type: String
+  #   Default: TodoAppPass123!
+  #   MinLength: 8
+  #   Description: Master password for the database
 
-  VpcSecurityGroup:
-    Type: AWS::EC2::SecurityGroup::Id
-    Description: Existing security group to allow DB access
+  # VpcSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup::Id
+  #   Description: Existing security group to allow DB access
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for RDS
 
   Subnet1:
     Type: AWS::EC2::Subnet::Id
@@ -37,65 +41,35 @@ Parameters:
     Description: ARN of the secret
 
 Resources:
-  # DBSubnetGroup:
-  #   Type: AWS::RDS::DBSubnetGroup
-  #   Properties:
-  #     DBSubnetGroupDescription: "Subnet group for RDS"
-  #     SubnetIds:
-  #       - !Ref Subnet1
-  #       - !Ref Subnet2
+  TodoDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow MySQL access for Aurora cluster
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
 
-  # MyDBInstance:
-  #   Type: AWS::RDS::DBInstance
-  #   Properties:
-  #     DBName: !Ref DBName
-  #     AllocatedStorage: "20" # Free Tier storage limit
-  #     DBInstanceClass: db.t3.micro
-  #     Engine: mysql
-  #     EngineVersion: "8.0"
-  #     # MasterUsername: !Ref DBUsername
-  #     # MasterUserPassword: !Ref DBPassword
-  #     MasterUsername:
-  #       !Join [
-  #         "",
-  #         [
-  #           "{{resolve:secretsmanager:",
-  #           !Ref DBCredentialsSecret,
-  #           ":SecretString:username}}",
-  #         ],
-  #       ]
-  #     MasterUserPassword:
-  #       !Join [
-  #         "",
-  #         [
-  #           "{{resolve:secretsmanager:",
-  #           !Ref DBCredentialsSecret,
-  #           ":SecretString:password}}",
-  #         ],
-  #       ]
-  #     VPCSecurityGroups:
-  #       - !Ref VpcSecurityGroup
-  #     DBSubnetGroupName: !Ref DBSubnetGroup
-  #     BackupRetentionPeriod: 7
-  #     MultiAZ: false
-  #     PubliclyAccessible: true
-  #     StorageType: gp2
-  #     DeletionProtection: false
-
-  TodoDBSubnetGroup:
+  DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnet group for Aurora cluster
+      DBSubnetGroupDescription: "Subnet group for RDS"
       SubnetIds:
         - !Ref Subnet1
         - !Ref Subnet2
 
-  TodoDBCluster:
-    Type: AWS::RDS::DBCluster
+  MyDBInstance:
+    Type: AWS::RDS::DBInstance
     Properties:
-      Engine: aurora-mysql
-      EngineVersion: "8.0.mysql_aurora.3.05.2"
-      DatabaseName: !Ref DBName
+      DBName: !Ref DBName
+      AllocatedStorage: "20" # Free Tier storage limit
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: "8.0"
+      # MasterUsername: !Ref DBUsername
+      # MasterUserPassword: !Ref DBPassword
       MasterUsername:
         !Join [
           "",
@@ -114,32 +88,85 @@ Resources:
             ":SecretString:password}}",
           ],
         ]
-      DBSubnetGroupName: !Ref TodoDBSubnetGroup
-      VpcSecurityGroupIds:
-        - !Ref VpcSecurityGroup
+      VPCSecurityGroups:
+        - !Ref TodoDBSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
       BackupRetentionPeriod: 7
-      PreferredBackupWindow: 03:00-04:00
+      MultiAZ: false
+      PubliclyAccessible: true
+      StorageType: gp2
       DeletionProtection: false
-      StorageEncrypted: true
 
-  TodoDBInstance1:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBInstanceClass: db.t3.medium # change to db.t3.micro for dev
-      Engine: aurora-mysql
-      DBClusterIdentifier: !Ref TodoDBCluster
-      PubliclyAccessible: false # ⚠️ For dev; set false for prod
-    DependsOn: TodoDBCluster
+  # TodoDBSubnetGroup:
+  #   Type: AWS::RDS::DBSubnetGroup
+  #   Properties:
+  #     DBSubnetGroupDescription: Subnet group for Aurora cluster
+  #     SubnetIds:
+  #       - !Ref Subnet1
+  #       - !Ref Subnet2
+
+  # TodoDBCluster:
+  #   Type: AWS::RDS::DBCluster
+  #   Properties:
+  #     Engine: aurora-mysql
+  #     EngineVersion: "8.0.mysql_aurora.3.05.2"
+  #     DatabaseName: !Ref DBName
+  #     MasterUsername:
+  #       !Join [
+  #         "",
+  #         [
+  #           "{{resolve:secretsmanager:",
+  #           !Ref DBCredentialsSecret,
+  #           ":SecretString:username}}",
+  #         ],
+  #       ]
+  #     MasterUserPassword:
+  #       !Join [
+  #         "",
+  #         [
+  #           "{{resolve:secretsmanager:",
+  #           !Ref DBCredentialsSecret,
+  #           ":SecretString:password}}",
+  #         ],
+  #       ]
+  #     DBSubnetGroupName: !Ref TodoDBSubnetGroup
+  #     VpcSecurityGroupIds:
+  #       - !Ref VpcSecurityGroup
+  #     BackupRetentionPeriod: 7
+  #     PreferredBackupWindow: 03:00-04:00
+  #     DeletionProtection: false
+  #     StorageEncrypted: true
+
+  # TodoDBInstance1:
+  #   Type: AWS::RDS::DBInstance
+  #   Properties:
+  #     DBInstanceClass: db.t3.medium # change to db.t3.micro for dev
+  #     Engine: aurora-mysql
+  #     DBClusterIdentifier: !Ref TodoDBCluster
+  #     PubliclyAccessible: false # ⚠️ For dev; set false for prod
+  #   DependsOn: TodoDBCluster
 
 Outputs:
+  # DBEndpoint:
+  #   Description: "JDBC connection string for the database"
+  #   Value: !GetAtt TodoDBInstance1.Endpoint.Address
+
   DBEndpoint:
     Description: "JDBC connection string for the database"
-    Value: !GetAtt TodoDBInstance1.Endpoint.Address
+    Value: !GetAtt MyDBInstance.Endpoint.Address
+
+  # DBName:
+  #   Description: "Name of the database"
+  #   Value: !GetAtt TodoDBInstance1.DBName
 
   DBName:
     Description: "Name of the database"
-    Value: !GetAtt TodoDBInstance1.DBName
+    Value: !GetAtt MyDBInstance.DBName
+
+  # DBPort:
+  #   Description: "Port of the database"
+  #   Value: !GetAtt TodoDBInstance1.Endpoint.Port
 
   DBPort:
     Description: "Port of the database"
-    Value: !GetAtt TodoDBInstance1.Endpoint.Port
+    Value: !GetAtt MyDBInstance.Endpoint.Port

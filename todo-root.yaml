@@ -53,6 +53,12 @@ Parameters:
     Type: String
     Default: hemal@yopmail.com
     Description: Email address to receive CloudWatch alarms
+  IsSetupPrivateSubnet:
+    Type: Boolean
+    Default: false
+    AllowedValues:
+      - true
+      - false
 
 Mappings:
   RegionToAMI:
@@ -74,6 +80,7 @@ Resources:
         PublicSubnetCidr2: !Ref PublicSubnetCidr2
         PrivateSubnetCidr1: !Ref PrivateSubnetCidr1
         PrivateSubnetCidr2: !Ref PrivateSubnetCidr2
+        IsSetupPrivateSubnet: !Ref IsSetupPrivateSubnet
 
   SecurityGroupStack:
     Type: AWS::CloudFormation::Stack
@@ -87,8 +94,14 @@ Resources:
     Properties:
       TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-rds.yaml
       Parameters:
-        Subnet1: !GetAtt VpcStack.Outputs.PrivateSubnetId1
-        Subnet2: !GetAtt VpcStack.Outputs.PrivateSubnetId2
+        Subnet1: !If
+          - IsSetupPrivateSubnet
+          - !GetAtt VpcStack.Outputs.PrivateSubnetId1
+          - !GetAtt VpcStack.Outputs.PublicSubnetId1
+        Subnet2: !If
+          - IsSetupPrivateSubnet
+          - !GetAtt VpcStack.Outputs.PrivateSubnetId2
+          - !GetAtt VpcStack.Outputs.PublicSubnetId2
         VpcSecurityGroup: !GetAtt SecurityGroupStack.Outputs.TodoDBSecurityGroupId
         DBCredentialsSecret: !Ref DBCredentialsSecret
 
@@ -113,8 +126,14 @@ Resources:
         VpcId: !GetAtt VpcStack.Outputs.VpcId
         SubnetPublicId1: !GetAtt VpcStack.Outputs.PublicSubnetId1
         SubnetPublicId2: !GetAtt VpcStack.Outputs.PublicSubnetId2
-        SubnetPrivateId1: !GetAtt VpcStack.Outputs.PrivateSubnetId1
-        SubnetPrivateId2: !GetAtt VpcStack.Outputs.PrivateSubnetId2
+        SubnetPrivateId1: !If
+          - IsSetupPrivateSubnet
+          - !GetAtt VpcStack.Outputs.PrivateSubnetId1
+          - !GetAtt VpcStack.Outputs.PublicSubnetId1
+        SubnetPrivateId2: !If
+          - IsSetupPrivateSubnet
+          - !GetAtt VpcStack.Outputs.PrivateSubnetId2
+          - !GetAtt VpcStack.Outputs.PublicSubnetId2
         SecuritySSHGroup: !GetAtt SecurityGroupStack.Outputs.SecuritySSHGroupId
         SecurityHTTPGroup: !GetAtt SecurityGroupStack.Outputs.SecurityHTTPGroupId
         ALBSecurityGroup: !GetAtt SecurityGroupStack.Outputs.ALBSecurityGroupId
@@ -159,6 +178,10 @@ Resources:
         MyAutoScalingGroup: !GetAtt BackendPipelineStack.Outputs.AppAutoScalingGroupId
         MyAuroraCluster: !GetAtt RdsStack.Outputs.TodoDBClusterId
         MyALB: !GetAtt BackendPipelineStack.Outputs.AppLoadBalancerId
+
+## Stack Conditions ##
+Conditions:
+  CreatePrivateSubnet: !Equals [!Ref IsSetupPrivateSubnet, true]
 
 ## Stack Outputs ##
 Outputs:

@@ -18,6 +18,12 @@ Parameters:
   PrivateSubnetCidr2:
     Type: String
     Default: 10.0.4.0/24
+  IsSetupPrivateSubnet:
+    Type: Boolean
+    Default: false
+    AllowedValues:
+      - true
+      - false
 
 ## Stack Resources ##
 Resources:
@@ -129,11 +135,13 @@ Resources:
   ## NAT Resources ##
   NatEIP:
     Type: AWS::EC2::EIP
+    Conditions: !Ref CreatePrivateSubnet
     Properties:
       Domain: vpc
 
   NatGateway:
     Type: AWS::EC2::NatGateway
+    Conditions: !Ref CreatePrivateSubnet
     Properties:
       AllocationId: !GetAtt NatEIP.AllocationId
       SubnetId: !Ref PublicSubnet1
@@ -143,6 +151,7 @@ Resources:
 
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
+    Conditions: !Ref CreatePrivateSubnet
     Properties:
       VpcId: !Ref TodoVPC
       Tags:
@@ -151,6 +160,7 @@ Resources:
 
   PrivateRoute:
     Type: AWS::EC2::Route
+    Conditions: !Ref CreatePrivateSubnet
     Properties:
       RouteTableId: !Ref PrivateRouteTable
       DestinationCidrBlock: 0.0.0.0/0
@@ -158,12 +168,14 @@ Resources:
 
   PrivateSubnetRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Conditions: !Ref CreatePrivateSubnet
     Properties:
       SubnetId: !Ref PrivateSubnet1
       RouteTableId: !Ref PrivateRouteTable
 
   PrivateSubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Conditions: !Ref CreatePrivateSubnet
     Properties:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
@@ -171,6 +183,7 @@ Resources:
   ## VPC Endpoint Resources ##
   S3VPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Conditions: !Ref CreatePrivateSubnet
     Properties:
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
       VpcId: !Ref TodoVPC
@@ -179,7 +192,11 @@ Resources:
         - !Ref PrivateRouteTable
         - !Ref PublicRouteTable
 
-## Outputs ##
+## Stack Conditions ##
+Conditions:
+  CreatePrivateSubnet: !Equals [!Ref IsSetupPrivateSubnet, true]
+
+## Stack Outputs ##
 Outputs:
   VpcId:
     Value: !Ref TodoVPC
@@ -195,9 +212,11 @@ Outputs:
       Name: CustomPublicSubnetId2
   PrivateSubnetId1:
     Value: !Ref PrivateSubnet1
+    Conditions: !Ref CreatePrivateSubnet
     Export:
       Name: CustomPrivateSubnetId1
   PrivateSubnetId2:
     Value: !Ref PrivateSubnet2
+    Conditions: !Ref CreatePrivateSubnet
     Export:
       Name: CustomPrivateSubnetId2
