@@ -41,6 +41,7 @@ Resources:
       ServiceRole: !Ref FrontendCodeBuildServiceRoleArn
       Artifacts:
         Type: CODEPIPELINE
+        BuildSpec: buildspec-frontend.yml
       Environment:
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:7.0

@@ -270,6 +270,7 @@ Resources:
       ServiceRole: !Ref CodeBuildRoleArn
       Source:
         Type: CODEPIPELINE
+        BuildSpec: buildspec-backend.yml
       Environment:
         Type: LINUX_CONTAINER
         Image: aws/codebuild/standard:6.0
