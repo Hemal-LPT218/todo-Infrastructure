@@ -54,7 +54,7 @@ Parameters:
     Default: hemal@yopmail.com
     Description: Email address to receive CloudWatch alarms
   IsSetupPrivateSubnet:
-    Type: Boolean
+    Type: String
     Default: false
     AllowedValues:
       - true
