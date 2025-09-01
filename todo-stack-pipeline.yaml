@@ -7,18 +7,6 @@ Parameters:
     Type: String
     Default: todo-Infrastructure
     Description: GitHub repository name (e.g. todo-Infrastructure)
-  GitHubOwner:
-    Type: String
-    Default: Hemal-LPT218
-    Description: GitHub username or org (e.g. Hemal-LPT218)
-  GitHubBranch:
-    Type: String
-    Default: main
-    Description: Branch to use
-  CodeStarConnectionArn:
-    Type: String
-    Default: arn:aws:codeconnections:ap-south-1:730335183789:connection/e1b46677-0885-4a3c-9df2-5a6caefb6acb
-    Description: ARN of CodeStar connection for GitHub (create beforehand in AWS Console)
   RootStackName:
     Type: String
     Default: todo-stack
@@ -27,18 +15,92 @@ Parameters:
     Type: String
     Default: todo-root.yaml
     Description: Root CloudFormation template file name
-  ConfigurationFile:
+  VpcCidr:
     Type: String
-    Default: parameters.json
-    Description: Configuration file name
-  PipelineArtifactBucket:
+    Default: 10.0.0.0/16
+    Description: VPC CIDR
+  PublicSubnetCidr1:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: Public subnet CIDR
+  PublicSubnetCidr2:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: Public subnet CIDR
+  PrivateSubnetCidr1:
+    Type: String
+    Default: 10.0.3.0/24
+    Description: Private subnet CIDR
+  PrivateSubnetCidr2:
+    Type: String
+    Default: 10.0.4.0/24
+    Description: Private subnet CIDR
+  ConnectionArn:
+    Type: String
+    Default: arn:aws:codeconnections:ap-south-1:730335183789:connection/e1b46677-0885-4a3c-9df2-5a6caefb6acb
+    Description: ARN of CodeStar connection
+  CodePipelineBucket:
     Type: String
     Default: codepipeline-us-east-1-f3de767da42b-4a7e-bd92-34e343e25504
-    Description: S3 bucket for CodePipeline artifacts
+    Description: S3 bucket for CodePipeline
+  RepositoryUsername:
+    Type: String
+    Default: Hemal-LPT218
+    Description: GitHub username
+  BackendRepositoryName:
+    Type: String
+    Default: todo-backend
+    Description: GitHub repository name
+  FrontendRepositoryName:
+    Type: String
+    Default: todo-frontend
+    Description: GitHub repository name
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: Branch to use
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: EC2 instance type for backend
+  PORT:
+    Type: String
+    Default: 3000
+    Description: Port number for backend
+  DBCredentialsSecret:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:730335183789:secret:todo-db-credentials-r50p22
+    Description: Master password for the database
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair
+  AlarmEmail:
+    Type: String
+    Default: hemal@yopmail.com
+    Description: Email address to receive CloudWatch alarms
   NestedStackTemplateBucket:
     Type: String
     Default: cloud-formation-tamplate-for-todo-app
     Description: S3 bucket for nested stack templates
+  IsSetupPrivateSubnet:
+    Type: String
+    Default: "true"
+    Description: Db and Api in private subnet
+    AllowedValues:
+      - "true"
+      - "false"
+  AppName:
+    Type: String
+    Default: todo
+    Description: Application name used for tagging and naming resources
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
 
 ## Stack Resources ##
 Resources:
@@ -63,7 +125,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - codestar-connections:UseConnection
-                Resource: !Ref CodeStarConnectionArn
+                Resource: !Ref ConnectionArn
         - PolicyName: AllowS3Artifacts
           PolicyDocument:
             Version: "2012-10-17"
@@ -75,8 +137,8 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:GetBucketVersioning
                 Resource:
-                  - !Sub arn:aws:s3:::${PipelineArtifactBucket}
-                  - !Sub arn:aws:s3:::${PipelineArtifactBucket}/*
+                  - !Sub arn:aws:s3:::${CodePipelineBucket}
+                  - !Sub arn:aws:s3:::${CodePipelineBucket}/*
                   - !Sub arn:aws:s3:::${NestedStackTemplateBucket}
                   - !Sub arn:aws:s3:::${NestedStackTemplateBucket}/*
         - PolicyName: AllowPassDeployRole
@@ -123,7 +185,7 @@ Resources:
       RoleArn: !GetAtt CodePipelineRole.Arn
       ArtifactStore:
         Type: S3
-        Location: !Ref PipelineArtifactBucket
+        Location: !Ref CodePipelineBucket
       Stages:
         - Name: Source
           Actions:
@@ -136,8 +198,8 @@ Resources:
               OutputArtifacts:
                 - Name: SourceOutput
               Configuration:
-                ConnectionArn: !Ref CodeStarConnectionArn
-                FullRepositoryId: !Sub "${GitHubOwner}/${GitHubRepo}"
+                ConnectionArn: !Ref ConnectionArn
+                FullRepositoryId: !Sub "${RepositoryUsername}/${GitHubRepo}"
                 BranchName: !Ref GitHubBranch
               RunOrder: 1
 
@@ -169,7 +231,29 @@ Resources:
                 Capabilities: CAPABILITY_IAM,CAPABILITY_NAMED_IAM
                 TemplatePath: !Sub "SourceOutput::${RootTemplateFile}"
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                TemplateConfiguration: "SourceOutput::parameters.json"
+                ParameterOverrides: !Sub |
+                  {
+                    "VpcCidr"   : "${VpcCidr}",
+                    "PublicSubnetCidr1"           : "${PublicSubnetCidr1}",
+                    "PublicSubnetCidr2"         : "${PublicSubnetCidr2}",
+                    "PrivateSubnetCidr1"           : "${PrivateSubnetCidr1}",
+                    "PrivateSubnetCidr2"         : "${PrivateSubnetCidr2}",
+                    "ConnectionArn"       : "${ConnectionArn}",
+                    "CodePipelineBucket"         : "${CodePipelineBucket}",
+                    "RepositoryUsername"       : "${RepositoryUsername}",
+                    "BackendRepositoryName"  : "${BackendRepositoryName}",
+                    "FrontendRepositoryName"           : "${FrontendRepositoryName}",
+                    "GitHubBranch"         : "${GitHubBranch}",
+                    "InstanceType"              : "${InstanceType}"
+                    "PORT"          : "${PORT}"
+                    "DBCredentialsSecret"          : "${DBCredentialsSecret}"
+                    "KeyName"          : "${KeyName}"
+                    "AlarmEmail"          : "${AlarmEmail}"
+                    "NestedStackTemplateBucket"          : "${NestedStackTemplateBucket}"
+                    "IsSetupPrivateSubnet"          : "${IsSetupPrivateSubnet}"
+                    "AppName"          : "${AppName}"
+                    "Environment"          : "${Environment}"
+                  }
               RunOrder: 2
 
 ## Stack Outputs ##
@@ -177,7 +261,6 @@ Outputs:
   CodePipelineName:
     Description: "CodePipeline Name"
     Value: !Ref CloudFormationPipeline
-
   CodePipelineURL:
     Description: "CodePipeline URL"
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${CloudFormationPipeline}/view?region=${AWS::Region}"
