@@ -6,6 +6,16 @@ Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC for ALB/EC2
+  AppName:
+    Type: String
+    Description: Application name
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Resources ##
 Resources:
@@ -13,30 +23,44 @@ Resources:
   TodoDBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow MySQL access for Aurora cluster
+      GroupDescription: !Sub "Allow MySQL access for ${AppName}-${Environment} Aurora cluster"
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
           SourceSecurityGroupId: !Ref SecuritySSHGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-db-sg"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   ## Security Group for EC2 ##
   SecuritySSHGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Allow SSH access on EC2 instance"
+      GroupDescription: !Sub "Allow SSH access on ${AppName}-${Environment} EC2 instance"
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-ssh-sg"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   SecurityHTTPGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Allow HTTP access on EC2 instance"
+      GroupDescription: !Sub "Allow HTTP access on ${AppName}-${Environment} EC2 instance"
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -47,12 +71,19 @@ Resources:
           FromPort: 3000
           ToPort: 3000
           SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-http-sg"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   ## Security Group for ALB ##
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Allow HTTP access on ALB"
+      GroupDescription: !Sub "Allow HTTP access on ${AppName}-${Environment} ALB"
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -63,21 +94,25 @@ Resources:
           FromPort: 3000
           ToPort: 3000
           CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-alb-sg"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
 ## Stack Outputs ##
 Outputs:
   SecuritySSHGroupId:
     Description: SSH security group ID
     Value: !Ref SecuritySSHGroup
-
   SecurityHTTPGroupId:
     Description: HTTP security group ID
     Value: !Ref SecurityHTTPGroup
-
   TodoDBSecurityGroupId:
     Description: Aurora security group ID
     Value: !Ref TodoDBSecurityGroup
-
   ALBSecurityGroupId:
     Description: ALB security group ID
     Value: !Ref ALBSecurityGroup

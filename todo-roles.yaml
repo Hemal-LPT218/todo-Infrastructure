@@ -5,10 +5,23 @@ Description: Stack for AMI roles
 Parameters:
   ConnectionArn:
     Type: String
+    Description: ARN of the CodeStar connection
   CodePipelineBucket:
     Type: String
+    Description: S3 bucket for CodePipeline
   DBCredentialsSecret:
     Type: String
+    Description: Secret name for DB credentials
+  AppName:
+    Type: String
+    Description: Application name
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Resources ##
 Resources:
@@ -16,7 +29,7 @@ Resources:
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CodePipelineRole
+      RoleName: !Sub "${AppName}-${Environment}-codepipeline-role"
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -27,7 +40,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess
       Policies:
-        - PolicyName: CodePipelineInline
+        - PolicyName: !Sub "${AppName}-${Environment}-codepipeline-inline"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -58,11 +71,18 @@ Resources:
                   - !Sub "arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:application:*"
                   - !Sub "arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:*/*"
                   - !Sub "arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentconfig:*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-codepipeline-role"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   CodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CodeBuildRole
+      RoleName: !Sub "${AppName}-${Environment}-codebuild-role"
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -73,7 +93,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess
       Policies:
-        - PolicyName: CodeBuildInline
+        - PolicyName: !Sub "${AppName}-${Environment}-codebuild-inline"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -89,11 +109,18 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-codebuild-role"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   CodeDeployRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CodeDeployRole
+      RoleName: !Sub "${AppName}-${Environment}-codedeploy-role"
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -104,7 +131,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
       Policies:
-        - PolicyName: CodeDeployS3Access
+        - PolicyName: !Sub "${AppName}-${Environment}-codedeploy-s3"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -117,7 +144,7 @@ Resources:
                 Action:
                   - s3:ListBucket
                 Resource: !Sub "arn:aws:s3:::${CodePipelineBucket}"
-        - PolicyName: CodeDeployELBAccess
+        - PolicyName: !Sub "${AppName}-${Environment}-codedeploy-elb"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -131,11 +158,18 @@ Resources:
                   - elasticloadbalancing:ModifyListener
                   - elasticloadbalancing:DescribeTargetHealth
                 Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-codedeploy-role"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: InstanceRole
+      RoleName: !Sub "${AppName}-${Environment}-ec2-role"
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -147,7 +181,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
       Policies:
-        - PolicyName: CloudWatchPolicy
+        - PolicyName: !Sub "${AppName}-${Environment}-ec2-cloudwatch"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -162,11 +196,18 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref DBCredentialsSecret
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-ec2-role"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: InstanceProfile
+      InstanceProfileName: !Sub "${AppName}-${Environment}-ec2-profile"
       Path: /
       Roles:
         - !Ref InstanceRole
@@ -175,6 +216,7 @@ Resources:
   FrontendCodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub "${AppName}-${Environment}-frontend-codepipeline-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -186,7 +228,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
       Policies:
-        - PolicyName: CodePipelineInline
+        - PolicyName: !Sub "${AppName}-${Environment}-frontend-pipeline-inline"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -199,10 +241,18 @@ Resources:
                   - codebuild:StartBuild
                   - codebuild:BatchGetBuilds
                 Resource: !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-frontend-codepipeline-role"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   FrontendCodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub "${AppName}-${Environment}-frontend-codebuild-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -213,7 +263,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess
       Policies:
-        - PolicyName: CodeBuildLoggingAndArtifacts
+        - PolicyName: !Sub "${AppName}-${Environment}-frontend-codebuild-inline"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -239,23 +289,31 @@ Resources:
                 Action:
                   - cloudfront:CreateInvalidation
                 Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-frontend-codebuild-role"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
 ## Stack Outputs ##
 Outputs:
   CodePipelineRoleArn:
     Value: !GetAtt CodePipelineRole.Arn
-
+    Description: CodePipeline role ARN
   CodeBuildRoleArn:
     Value: !GetAtt CodeBuildRole.Arn
-
+    Description: CodeBuild role ARN
   CodeDeployRoleArn:
     Value: !GetAtt CodeDeployRole.Arn
-
+    Description: CodeDeploy role ARN
   InstanceProfileArn:
     Value: !GetAtt InstanceProfile.Arn
-
+    Description: Instance profile ARN
   FrontendCodePipelineServiceRoleArn:
     Value: !GetAtt FrontendCodePipelineServiceRole.Arn
-
+    Description: Frontend CodePipeline role ARN
   FrontendCodeBuildServiceRoleArn:
     Value: !GetAtt FrontendCodeBuildServiceRole.Arn
+    Description: Frontend CodeBuild role ARN

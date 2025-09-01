@@ -7,35 +7,39 @@ Parameters:
     Type: String
     Default: tododb
     Description: Name of the initial MySQL database
-
   DBUsername:
     Type: String
     Default: admin
     Description: Master username for the database
-
   DBPassword:
     NoEcho: true
     Type: String
     Default: TodoAppPass123!
     MinLength: 8
     Description: Master password for the database
-
   VpcSecurityGroup:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Existing security group to allow DB access
-
   Subnet1:
     Type: AWS::EC2::Subnet::Id
     Description: Subnet ID for RDS (in your VPC)
-
   Subnet2:
     Type: AWS::EC2::Subnet::Id
     Description: Another subnet ID for RDS (different AZ recommended)
-
   DBCredentialsSecret:
     Type: String
     Default: arn:aws:secretsmanager:us-east-1:730335183789:secret:todo-db-credentials-r50p22
     Description: ARN of the secret
+  AppName:
+    Type: String
+    Description: Application name (injected from root stack)
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Resources ##
 Resources:
@@ -43,14 +47,23 @@ Resources:
   TodoDBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnet group for Aurora cluster
+      DBSubnetGroupName: !Sub "${AppName}-${Environment}-db-subnet-group"
+      DBSubnetGroupDescription: !Sub "${AppName}-${Environment} Subnet group for Aurora cluster"
       SubnetIds:
         - !Ref Subnet1
         - !Ref Subnet2
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-db-subnet-group"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   TodoDBCluster:
     Type: AWS::RDS::DBCluster
     Properties:
+      DBClusterIdentifier: !Sub "${AppName}-${Environment}-db-cluster"
       Engine: aurora-mysql
       EngineVersion: "8.0.mysql_aurora.3.05.2"
       DatabaseName: !Ref DBName
@@ -79,30 +92,42 @@ Resources:
       PreferredBackupWindow: 03:00-04:00
       DeletionProtection: false
       StorageEncrypted: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-db-cluster"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   TodoDBInstance1:
     Type: AWS::RDS::DBInstance
+    DependsOn: TodoDBCluster
     Properties:
-      DBInstanceClass: db.t3.medium 
+      DBInstanceIdentifier: !Sub "${AppName}-${Environment}-db-instance-1"
+      DBInstanceClass: db.t3.medium
       Engine: aurora-mysql
       DBClusterIdentifier: !Ref TodoDBCluster
-      PubliclyAccessible: false 
-    DependsOn: TodoDBCluster
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-db-instance-1"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
 ## Stack Outputs ##
 Outputs:
   DBEndpoint:
     Description: "JDBC connection string for the database"
     Value: !GetAtt TodoDBInstance1.Endpoint.Address
-
   DBName:
     Description: "Name of the database"
     Value: !Ref DBName
-
   DBPort:
     Description: "Port of the database"
     Value: !GetAtt TodoDBInstance1.Endpoint.Port
-
   TodoDBClusterId:
     Description: "ID of the database cluster"
     Value: !Ref TodoDBCluster

@@ -6,15 +6,19 @@ Parameters:
   InstanceType:
     Type: String
     Default: t2.micro
+    Description: EC2 instance type
   ConnectionArn:
     Type: String
     Default: arn:aws:codeconnections:ap-south-1:730335183789:connection/e1b46677-0885-4a3c-9df2-5a6caefb6acb
+    Description: ARN of the CodeStar connection
   RepositoryName:
     Type: String
     Default: Hemal-LPT218/todo-backend
+    Description: Name of the CodeStar repository
   CodePipelineBucket:
     Type: String
     Default: codepipeline-us-east-1-f3de767da42b-4a7e-bd92-34e343e25504
+    Description: S3 bucket for CodePipeline
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC for ALB/EC2
@@ -44,24 +48,43 @@ Parameters:
     Description: IAM instance profile
   DBEndpoint:
     Type: String
+    Description: RDS endpoint
   DBName:
     Type: String
     Default: todo
+    Description: Name of the database
   CodeDeployRoleArn:
     Type: String
+    Description: CodeDeploy role ARN
   CodeBuildRoleArn:
     Type: String
+    Description: CodeBuild role ARN
   CodePipelineRoleArn:
     Type: String
+    Description: CodePipeline role ARN
   PORT:
     Type: String
+    Description: Port number
   DBCredentialsSecret:
     Type: String
+    Description: Secret name for DB credentials
   GitHubBranch:
     Type: String
     Default: main
+    Description: GitHub branch
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair
+  AppName:
+    Type: String
+    Description: Application name (injected from root stack)
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Mappings ##
 Mappings:
@@ -77,6 +100,7 @@ Resources:
   AppLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
+      LaunchTemplateName: !Sub "${AppName}-${Environment}-be-launch-template"
       LaunchTemplateData:
         ImageId: !FindInMap [RegionMap, !Ref AWS::Region, AMI]
         InstanceType: !Ref InstanceType
@@ -147,18 +171,18 @@ Resources:
                     "collect_list": [
                       {
                         "file_path": "/home/ec2-user/app/dist/logs/app.log",
-                        "log_group_name": "/todo-backend/app",
+                        "log_group_name": "${AppName}/${Environment}/todo-backend/app",
                         "log_stream_name": "{instance_id}-app-log",
                         "timestamp_format": "%Y-%m-%d %H:%M:%S"
                       },
                       {
                         "file_path": "/home/ec2-user/.pm2/logs/todo-out.log",
-                        "log_group_name": "/todo-backend/pm2",
+                        "log_group_name": "${AppName}/${Environment}/todo-backend/pm2",
                         "log_stream_name": "{instance_id}-stdout"
                       },
                       {
                         "file_path": "/home/ec2-user/.pm2/logs/todo-error.log",
-                        "log_group_name": "/todo-backend/pm2",
+                        "log_group_name": "${AppName}/${Environment}/todo-backend/pm2",
                         "log_stream_name": "{instance_id}-stderr"
                       }
                     ]
@@ -181,7 +205,7 @@ Resources:
   AppLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: AppLoadBalancer
+      Name: !Sub "${AppName}-${Environment}-be-alb"
       Subnets:
         - !Ref SubnetPublicId1
         - !Ref SubnetPublicId2
@@ -189,17 +213,31 @@ Resources:
         - !Ref ALBSecurityGroup
       Scheme: internet-facing
       Type: application
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-be-alb"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   AppTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: AppTargetGroup
+      Name: !Sub "${AppName}-${Environment}-tg"
       Port: 3000
       Protocol: HTTP
       VpcId: !Ref VpcId
       TargetType: instance
       HealthCheckPath: /health
       UnhealthyThresholdCount: 5
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-be-tg"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   AppListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -215,6 +253,7 @@ Resources:
   AppAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
+      AutoScalingGroupName: !Sub "${AppName}-${Environment}-be-asg"
       VPCZoneIdentifier:
         - !Ref SubnetPrivateId1
         - !Ref SubnetPrivateId2
@@ -226,24 +265,30 @@ Resources:
       DesiredCapacity: 1
       TargetGroupARNs:
         - !Ref AppTargetGroup
+      HealthCheckType: ELB
       Tags:
         - Key: Name
-          Value: !Sub "${AWS::StackName}-ASG"
+          Value: !Sub "${AppName}-${Environment}-be-asg"
           PropagateAtLaunch: true
-      HealthCheckType: ELB
+        - Key: Application
+          Value: !Ref AppName
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value: !Ref Environment
+          PropagateAtLaunch: true
 
   ## CodeDeploy ##
   CodeDeployApp:
     Type: AWS::CodeDeploy::Application
     Properties:
-      ApplicationName: App
+      ApplicationName: !Sub "${AppName}-${Environment}-be-codedeploy-app"
       ComputePlatform: "Server"
 
   CodeDeployDeploymentGroup:
     Type: AWS::CodeDeploy::DeploymentGroup
     Properties:
       ApplicationName: !Ref CodeDeployApp
-      DeploymentGroupName: AppDeploymentGroup
+      DeploymentGroupName: !Sub "${AppName}-${Environment}-be-dg"
       ServiceRoleArn: !Ref CodeDeployRoleArn
       AutoRollbackConfiguration:
         Enabled: true
@@ -261,7 +306,7 @@ Resources:
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: CodeBuildProject
+      Name: !Sub "${AppName}-${Environment}-be-codebuild"
       ServiceRole: !Ref CodeBuildRoleArn
       Source:
         Type: CODEPIPELINE
@@ -281,7 +326,7 @@ Resources:
     DependsOn:
       - AppAutoScalingGroup
     Properties:
-      Name: CodePipeline
+      Name: !Sub "${AppName}-${Environment}-be-pipeline"
       RoleArn: !Ref CodePipelineRoleArn
       ArtifactStore:
         Type: S3
@@ -341,15 +386,16 @@ Resources:
 Outputs:
   CodePipelineBucket:
     Value: !Ref CodePipelineBucket
-
+    Description: CodePipeline bucket
   CodePipelineURL:
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${CodePipeline}/view?region=${AWS::Region}"
-
+    Description: CodePipeline URL
   LoadBalancerDNS:
     Value: !GetAtt AppLoadBalancer.DNSName
-
+    Description: LoadBalancer DNS
   AppAutoScalingGroupId:
     Value: !Ref AppAutoScalingGroup
-
+    Description: ASG ID
   AppLoadBalancerId:
     Value: !Ref AppLoadBalancer
+    Description: ALB ID

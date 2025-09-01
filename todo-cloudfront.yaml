@@ -6,6 +6,16 @@ Parameters:
   AlbDomainName:
     Type: String
     Description: The DNS name of your Application Load Balancer (e.g., apploadbalancer-xxxx.us-east-1.elb.amazonaws.com)
+  AppName:
+    Type: String
+    Description: Application name for tagging
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Resources ##
 Resources:
@@ -42,6 +52,13 @@ Resources:
             - OPTIONS
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
           OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # Managed-AllViewerExceptHostHeader
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-be-cloudfront"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## S3 Bucket for Frontend ##
   FrontendS3Bucket:
@@ -52,13 +69,20 @@ Resources:
         Status: Enabled
       WebsiteConfiguration:
         IndexDocument: index.html
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-fe-s3-bucket"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## S3 Origin for Frontend CloudFront ##
   FrontendCloudFrontOAC:
     Type: AWS::CloudFront::OriginAccessControl
     Properties:
       OriginAccessControlConfig:
-        Name: FrontendOAC
+        Name: !Sub "${AppName}-${Environment}-fe-cloudfront-oac"
         Description: Origin Access Control for CloudFront to S3
         SigningBehavior: always
         SigningProtocol: sigv4
@@ -93,6 +117,13 @@ Resources:
           CloudFrontDefaultCertificate: true
         PriceClass: PriceClass_All
         HttpVersion: http2
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-fe-cloudfront"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## S3 Bucket Policy for Frontend CloudFront ##
   FrontendBucketPolicy:
@@ -117,15 +148,12 @@ Outputs:
   ApiCloudFrontDistributionDomain:
     Description: CloudFront Distribution Domain Name
     Value: !GetAtt ApiCloudFrontDistribution.DomainName
-
   FrontendCloudFrontDomain:
     Description: CloudFront Distribution Domain Name
     Value: !GetAtt FrontendCloudFrontDistribution.DomainName
-
   FrontendCloudFrontDistributionId:
     Description: CloudFront Distribution ID
     Value: !Ref FrontendCloudFrontDistribution
-
   FrontendS3Bucket:
     Description: S3 Bucket Name
     Value: !Ref FrontendS3Bucket

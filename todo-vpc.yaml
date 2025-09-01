@@ -6,24 +6,40 @@ Parameters:
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
+    Description: VPC CIDR
   PublicSubnetCidr1:
     Type: String
     Default: 10.0.1.0/24
+    Description: Public subnet CIDR
   PublicSubnetCidr2:
     Type: String
     Default: 10.0.2.0/24
+    Description: Public subnet CIDR
   PrivateSubnetCidr1:
     Type: String
     Default: 10.0.3.0/24
+    Description: Private subnet CIDR
   PrivateSubnetCidr2:
     Type: String
     Default: 10.0.4.0/24
+    Description: Private subnet CIDR
   IsSetupPrivateSubnet:
     Type: String
-    Default: false
+    Default: "false"
+    Description: Db and Api in private subnet
     AllowedValues:
-      - true
-      - false
+      - "true"
+      - "false"
+  AppName:
+    Type: String
+    Description: Application name for tagging
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Resources ##
 Resources:
@@ -36,7 +52,11 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: CustomVPC
+          Value: !Sub "${AppName}-${Environment}-vpc"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## Subnet Resources ##
   PublicSubnet1:
@@ -50,7 +70,13 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: CustomVPC-PublicSubnet1
+          Value: !Sub "${AppName}-${Environment}-public-subnet-1"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: "Network"
+          Value: "public"
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
@@ -63,7 +89,13 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: CustomVPC-PublicSubnet2
+          Value: !Sub "${AppName}-${Environment}-public-subnet-2"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: "Network"
+          Value: "public"
 
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
@@ -76,7 +108,13 @@ Resources:
         - Fn::GetAZs: !Ref "AWS::Region"
       Tags:
         - Key: Name
-          Value: CustomVPC-PrivateSubnet1
+          Value: !Sub "${AppName}-${Environment}-private-subnet-1"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: "Network"
+          Value: "private"
 
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
@@ -89,7 +127,13 @@ Resources:
         - Fn::GetAZs: !Ref "AWS::Region"
       Tags:
         - Key: Name
-          Value: CustomVPC-PrivateSubnet2
+          Value: !Sub "${AppName}-${Environment}-private-subnet-2"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: "Network"
+          Value: "private"
 
   ## Internet Gateway Resources ##
   InternetGateway:
@@ -97,7 +141,11 @@ Resources:
     Properties:
       Tags:
         - Key: Name
-          Value: CustomVPC-IGW
+          Value: !Sub "${AppName}-${Environment}-igw"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -112,7 +160,11 @@ Resources:
       VpcId: !Ref TodoVPC
       Tags:
         - Key: Name
-          Value: PublicRouteTable
+          Value: !Sub "${AppName}-${Environment}-public-rt"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -140,6 +192,13 @@ Resources:
     Condition: CreatePrivateSubnet
     Properties:
       Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-nat-eip"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   NatGateway:
     Type: AWS::EC2::NatGateway
@@ -149,7 +208,11 @@ Resources:
       SubnetId: !Ref PublicSubnet1
       Tags:
         - Key: Name
-          Value: MyAppNAT
+          Value: !Sub "${AppName}-${Environment}-nat"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
@@ -158,7 +221,11 @@ Resources:
       VpcId: !Ref TodoVPC
       Tags:
         - Key: Name
-          Value: PrivateRouteTable
+          Value: !Sub "${AppName}-${Environment}-private-rt"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   PrivateRoute:
     Type: AWS::EC2::Route
@@ -193,32 +260,34 @@ Resources:
       RouteTableIds:
         - !Ref PrivateRouteTable
         - !Ref PublicRouteTable
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-s3-endpoint"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
 ## Stack Conditions ##
 Conditions:
-  CreatePrivateSubnet: !Equals [!Ref IsSetupPrivateSubnet, true]
+  CreatePrivateSubnet: !Equals [!Ref IsSetupPrivateSubnet, "true"]
 
 ## Stack Outputs ##
 Outputs:
   VpcId:
     Value: !Ref TodoVPC
-    Export:
-      Name: CustomVPCId
+    Description: VPC ID
   PublicSubnetId1:
     Value: !Ref PublicSubnet1
-    Export:
-      Name: CustomPublicSubnetId1
+    Description: Public Subnet 1
   PublicSubnetId2:
     Value: !Ref PublicSubnet2
-    Export:
-      Name: CustomPublicSubnetId2
+    Description: Public Subnet 2
   PrivateSubnetId1:
     Value: !Ref PrivateSubnet1
+    Description: Private Subnet 1
     Condition: CreatePrivateSubnet
-    Export:
-      Name: CustomPrivateSubnetId1
   PrivateSubnetId2:
     Value: !Ref PrivateSubnet2
+    Description: Private Subnet 2
     Condition: CreatePrivateSubnet
-    Export:
-      Name: CustomPrivateSubnetId2

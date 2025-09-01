@@ -6,36 +6,47 @@ Parameters:
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
+    Description: VPC CIDR
   PublicSubnetCidr1:
     Type: String
     Default: 10.0.1.0/24
+    Description: Public subnet CIDR
   PublicSubnetCidr2:
     Type: String
     Default: 10.0.2.0/24
+    Description: Public subnet CIDR
   PrivateSubnetCidr1:
     Type: String
     Default: 10.0.3.0/24
+    Description: Private subnet CIDR
   PrivateSubnetCidr2:
     Type: String
     Default: 10.0.4.0/24
+    Description: Private subnet CIDR
   ConnectionArn:
     Type: String
     Default: arn:aws:codeconnections:ap-south-1:730335183789:connection/e1b46677-0885-4a3c-9df2-5a6caefb6acb
+    Description: ARN of CodeStar connection
   CodePipelineBucket:
     Type: String
     Default: codepipeline-us-east-1-f3de767da42b-4a7e-bd92-34e343e25504
+    Description: S3 bucket for CodePipeline
   RepositoryUsername:
     Type: String
     Default: Hemal-LPT218
+    Description: GitHub username
   BackendRepositoryName:
     Type: String
     Default: todo-backend
+    Description: GitHub repository name
   FrontendRepositoryName:
     Type: String
     Default: todo-frontend
+    Description: GitHub repository name
   GitHubBranch:
     Type: String
     Default: main
+    Description: Branch to use
   InstanceType:
     Type: String
     Default: t2.micro
@@ -43,22 +54,41 @@ Parameters:
   PORT:
     Type: String
     Default: 3000
+    Description: Port number for backend
   DBCredentialsSecret:
     Type: String
     Default: arn:aws:secretsmanager:us-east-1:730335183789:secret:todo-db-credentials-r50p22
     Description: Master password for the database
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair
   AlarmEmail:
     Type: String
     Default: hemal@yopmail.com
     Description: Email address to receive CloudWatch alarms
+  NestedStackTemplateBucket:
+    Type: String
+    Default: cloud-formation-tamplate-for-todo-app
+    Description: S3 bucket for nested stack templates
   IsSetupPrivateSubnet:
     Type: String
-    Default: true
+    Default: "true"
+    Description: Db and Api in private subnet
     AllowedValues:
-      - true
-      - false
+      - "true"
+      - "false"
+  AppName:
+    Type: String
+    Default: todo
+    Description: Application name used for tagging and naming resources
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
 
 Mappings:
   RegionToAMI:
@@ -73,7 +103,8 @@ Resources:
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-vpc.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-vpc"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-vpc.yaml"
       Parameters:
         VpcCidr: !Ref VpcCidr
         PublicSubnetCidr1: !Ref PublicSubnetCidr1
@@ -81,18 +112,38 @@ Resources:
         PrivateSubnetCidr1: !Ref PrivateSubnetCidr1
         PrivateSubnetCidr2: !Ref PrivateSubnetCidr2
         IsSetupPrivateSubnet: !Ref IsSetupPrivateSubnet
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-vpc"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   SecurityGroupStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-security-group.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-sg"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-security-group.yaml"
       Parameters:
         VpcId: !GetAtt VpcStack.Outputs.VpcId
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-sg"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   RdsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-rds.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-rds"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-rds.yaml"
       Parameters:
         Subnet1: !If
           - CreatePrivateSubnet
@@ -104,20 +155,40 @@ Resources:
           - !GetAtt VpcStack.Outputs.PublicSubnetId2
         VpcSecurityGroup: !GetAtt SecurityGroupStack.Outputs.TodoDBSecurityGroupId
         DBCredentialsSecret: !Ref DBCredentialsSecret
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-rds"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   RolesStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-roles.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-roles"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-roles.yaml"
       Parameters:
         ConnectionArn: !Ref ConnectionArn
         CodePipelineBucket: !Ref CodePipelineBucket
         DBCredentialsSecret: !Ref DBCredentialsSecret
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-roles"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   BackendPipelineStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-backend-pipeline.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-backend-pipeline"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-backend-pipeline.yaml"
       Parameters:
         InstanceType: !Ref InstanceType
         ConnectionArn: !Ref ConnectionArn
@@ -146,18 +217,38 @@ Resources:
         PORT: !Ref PORT
         DBCredentialsSecret: !Ref DBCredentialsSecret
         KeyName: !Ref KeyName
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-backend-pipeline"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   CloudFrontStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-cloudfront.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-cloudfront"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-cloudfront.yaml"
       Parameters:
         AlbDomainName: !GetAtt BackendPipelineStack.Outputs.LoadBalancerDNS
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-cloudfront"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   FrontendPipelineStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-frontend-pipeline.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-frontend-pipeline"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-frontend-pipeline.yaml"
       Parameters:
         ConnectionArn: !Ref ConnectionArn
         RepositoryName: !Sub "${RepositoryUsername}/${FrontendRepositoryName}"
@@ -168,34 +259,54 @@ Resources:
         CloudFrontDistributionId: !GetAtt CloudFrontStack.Outputs.FrontendCloudFrontDistributionId
         FrontendCodePipelineServiceRoleArn: !GetAtt RolesStack.Outputs.FrontendCodePipelineServiceRoleArn
         FrontendCodeBuildServiceRoleArn: !GetAtt RolesStack.Outputs.FrontendCodeBuildServiceRoleArn
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-frontend-pipeline"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   CloudwatchMonitoringStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://cloud-formation-tamplate-for-todo-app.s3.us-east-1.amazonaws.com/todo-cloudWatch-monitoring.yaml
+      StackName: !Sub "${AppName}-${Environment}-stack-cloudwatch-monitoring"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-cloudWatch-monitoring.yaml"
       Parameters:
         AlarmEmail: !Ref AlarmEmail
         MyAutoScalingGroup: !GetAtt BackendPipelineStack.Outputs.AppAutoScalingGroupId
         MyAuroraCluster: !GetAtt RdsStack.Outputs.TodoDBClusterId
         MyALB: !GetAtt BackendPipelineStack.Outputs.AppLoadBalancerId
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-cloudwatch-monitoring"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
 ## Stack Conditions ##
 Conditions:
-  CreatePrivateSubnet: !Equals [!Ref IsSetupPrivateSubnet, true]
+  CreatePrivateSubnet: !Equals [!Ref IsSetupPrivateSubnet, "true"]
 
 ## Stack Outputs ##
 Outputs:
   DBEndpoint:
     Value: !GetAtt RdsStack.Outputs.DBEndpoint
-
+    Description: DB Endpoint
   LoadBalancerDNS:
     Value: !GetAtt BackendPipelineStack.Outputs.LoadBalancerDNS
-
+    Description: LoadBalancer DNS
   CodePipelineURL:
     Value: !GetAtt BackendPipelineStack.Outputs.CodePipelineURL
-
+    Description: CodePipeline URL
   ApiCloudFrontDistributionDomain:
     Value: !GetAtt CloudFrontStack.Outputs.ApiCloudFrontDistributionDomain
-
+    Description: Api CloudFront Distribution Domain
   FrontendCloudFrontDomain:
     Value: !GetAtt CloudFrontStack.Outputs.FrontendCloudFrontDomain
+    Description: Frontend CloudFront Distribution Domain

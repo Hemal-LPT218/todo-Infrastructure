@@ -31,6 +31,16 @@ Parameters:
   FrontendCodeBuildServiceRoleArn:
     Type: String
     Description: ARN of the CodeBuild service role
+  AppName:
+    Type: String
+    Description: Application name (passed from root stack)
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Resources ##
 Resources:
@@ -38,6 +48,7 @@ Resources:
   ReactBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
+      Name: !Sub "${AppName}-${Environment}-fe-codebuild"
       ServiceRole: !Ref FrontendCodeBuildServiceRoleArn
       Artifacts:
         Type: CODEPIPELINE
@@ -59,6 +70,7 @@ Resources:
   CloudFrontInvalidationProject:
     Type: AWS::CodeBuild::Project
     Properties:
+      Name: !Sub "${AppName}-${Environment}-fe-codebuild-cf-invalidation"
       ServiceRole: !Ref FrontendCodeBuildServiceRoleArn
       Artifacts:
         Type: CODEPIPELINE
@@ -84,6 +96,7 @@ Resources:
   ReactPipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
+      Name: !Sub "${AppName}-${Environment}-fe-pipeline"
       RoleArn: !Ref FrontendCodePipelineServiceRoleArn
       ArtifactStore:
         Type: S3
@@ -159,7 +172,6 @@ Outputs:
   PipelineName:
     Value: !Ref ReactPipeline
     Description: CodePipeline Name
-
   PipelineURL:
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${ReactPipeline}/view?region=${AWS::Region}"
     Description: CodePipeline URL

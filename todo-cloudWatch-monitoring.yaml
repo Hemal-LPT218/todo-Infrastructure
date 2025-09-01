@@ -15,6 +15,16 @@ Parameters:
   MyALB:
     Type: String
     Description: ALB logical ID
+  AppName:
+    Type: String
+    Description: Application name
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
 ## Stack Resources ##
 Resources:
@@ -22,7 +32,7 @@ Resources:
   AlarmSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: "MonitoringAlarms"
+      TopicName: !Sub "${AppName}-${Environment}-cw-alarms-topic"
       Subscription:
         - Endpoint: !Ref AlarmEmail
           Protocol: email
@@ -31,26 +41,38 @@ Resources:
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: "/ec2/asg"
+      LogGroupName: !Sub "${AppName}/${Environment}/ec2/asg"
       RetentionInDays: 7
 
   ALBLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: "/alb/access"
+      LogGroupName: !Sub "${AppName}/${Environment}/alb/access"
       RetentionInDays: 7
 
   RDSLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: "/rds/aurora-mysql"
+      LogGroupName: !Sub "${AppName}/${Environment}/rds/aurora-mysql"
+      RetentionInDays: 7
+
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "${AppName}/${Environment}/todo-backend/app"
+      RetentionInDays: 7
+
+  BackendPM2LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "${AppName}/${Environment}/todo-backend/pm2"
       RetentionInDays: 7
 
   ## CloudWatch Alarms ##
   EC2HighCPUAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: "HighCPU-EC2"
+      AlarmName: !Sub "${AppName}-${Environment}-cw-HighCPU-EC2"
       AlarmDescription: "Alarm if EC2 CPU > 70% for 5 minutes"
       Namespace: "AWS/EC2"
       MetricName: "CPUUtilization"
@@ -70,7 +92,7 @@ Resources:
   RDSHighCPUAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: "HighCPU-RDS"
+      AlarmName: !Sub "${AppName}-${Environment}-cw-HighCPU-RDS"
       AlarmDescription: "Alarm if Aurora CPU > 80% for 5 minutes"
       Namespace: "AWS/RDS"
       MetricName: "CPUUtilization"
@@ -90,7 +112,7 @@ Resources:
   ALB5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: "ALB-5XX-Errors"
+      AlarmName: !Sub "${AppName}-${Environment}-cw-ALB-5XX-Errors"
       AlarmDescription: "Alarm if ALB returns too many 5XX errors"
       Namespace: "AWS/ApplicationELB"
       MetricName: "HTTPCode_ELB_5XX_Count"
@@ -111,7 +133,7 @@ Resources:
   MonitoringDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
-      DashboardName: "InfraMonitoring"
+      DashboardName: !Sub "${AppName}-${Environment}-cw-dashboard"
       DashboardBody: !Sub |
         {
           "widgets": [
@@ -163,7 +185,6 @@ Outputs:
   DashboardName:
     Description: "CloudWatch Dashboard Name"
     Value: !Ref MonitoringDashboard
-
   AlarmSNSTopicArn:
     Description: "SNS Topic ARN for alarms"
     Value: !Ref AlarmSNSTopic
