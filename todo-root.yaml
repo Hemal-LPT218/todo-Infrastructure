@@ -103,7 +103,6 @@ Resources:
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-vpc"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-vpc.yaml"
       Parameters:
         VpcCidr: !Ref VpcCidr
@@ -125,7 +124,6 @@ Resources:
   SecurityGroupStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-sg"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-security-group.yaml"
       Parameters:
         VpcId: !GetAtt VpcStack.Outputs.VpcId
@@ -142,7 +140,6 @@ Resources:
   RdsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-rds"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-rds.yaml"
       Parameters:
         Subnet1: !If
@@ -168,7 +165,6 @@ Resources:
   RolesStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-roles"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-roles.yaml"
       Parameters:
         ConnectionArn: !Ref ConnectionArn
@@ -187,7 +183,6 @@ Resources:
   BackendPipelineStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-backend-pipeline"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-backend-pipeline.yaml"
       Parameters:
         InstanceType: !Ref InstanceType
@@ -230,7 +225,6 @@ Resources:
   CloudFrontStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-cloudfront"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-cloudfront.yaml"
       Parameters:
         AlbDomainName: !GetAtt BackendPipelineStack.Outputs.LoadBalancerDNS
@@ -247,7 +241,6 @@ Resources:
   FrontendPipelineStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-frontend-pipeline"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-frontend-pipeline.yaml"
       Parameters:
         ConnectionArn: !Ref ConnectionArn
@@ -272,7 +265,6 @@ Resources:
   CloudwatchMonitoringStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      StackName: !Sub "${AppName}-${Environment}-stack-cloudwatch-monitoring"
       TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-cloudWatch-monitoring.yaml"
       Parameters:
         AlarmEmail: !Ref AlarmEmail
