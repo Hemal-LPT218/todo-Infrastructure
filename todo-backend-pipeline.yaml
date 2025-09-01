@@ -283,6 +283,13 @@ Resources:
     Properties:
       ApplicationName: !Sub "${AppName}-${Environment}-be-codedeploy-app"
       ComputePlatform: "Server"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-be-codedeploy-app"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   CodeDeployDeploymentGroup:
     Type: AWS::CodeDeploy::DeploymentGroup
@@ -301,6 +308,13 @@ Resources:
         TargetGroupInfoList:
           - Name: !GetAtt AppTargetGroup.TargetGroupName
       DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-be-codedeploy-dg"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## CodeBuild ##
   CodeBuildProject:
@@ -319,6 +333,13 @@ Resources:
       Artifacts:
         Type: CODEPIPELINE
       TimeoutInMinutes: 15
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-be-codebuild"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## CodePipeline ##
   CodePipeline:
@@ -381,6 +402,13 @@ Resources:
               Configuration:
                 ApplicationName: !Ref CodeDeployApp
                 DeploymentGroupName: !Ref CodeDeployDeploymentGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-be-pipeline"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
 ## Stack Outputs ##
 Outputs:

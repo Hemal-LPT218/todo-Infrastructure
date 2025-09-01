@@ -108,6 +108,7 @@ Resources:
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${AppName}-${Environment}-stack-codepipeline-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -118,7 +119,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess
       Policies:
-        - PolicyName: AllowUseCodeStarConnection
+        - PolicyName: !Sub ${AppName}-${Environment}-stack-inline-policy-codestar
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -126,7 +127,7 @@ Resources:
                 Action:
                   - codestar-connections:UseConnection
                 Resource: !Ref ConnectionArn
-        - PolicyName: AllowS3Artifacts
+        - PolicyName: !Sub ${AppName}-${Environment}-stack-inline-policy-s3
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -141,14 +142,14 @@ Resources:
                   - !Sub arn:aws:s3:::${CodePipelineBucket}/*
                   - !Sub arn:aws:s3:::${NestedStackTemplateBucket}
                   - !Sub arn:aws:s3:::${NestedStackTemplateBucket}/*
-        - PolicyName: AllowPassDeployRole
+        - PolicyName: !Sub ${AppName}-${Environment}-stack-inline-policy-trust-cloudformation
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action: iam:PassRole
                 Resource: !GetAtt CloudFormationDeployRole.Arn
-        - PolicyName: AllowCloudFormationActions
+        - PolicyName: !Sub ${AppName}-${Environment}-stack-inline-policy-cloudformation
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -162,10 +163,18 @@ Resources:
                   - cloudformation:GetTemplate
                   - cloudformation:ValidateTemplate
                 Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${RootStackName}/*
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-${Environment}-stack-codepipeline-role
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   CloudFormationDeployRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Sub ${AppName}-${Environment}-stack-codedeploy-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -177,11 +186,19 @@ Resources:
       ManagedPolicyArns:
         # Allows CloudFormation to create/update/delete stacks
         - arn:aws:iam::aws:policy/AdministratorAccess
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-${Environment}-stack-codedeploy-role
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
   ## Pipeline Resources ##
   CloudFormationPipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
+      Name: !Sub ${AppName}-${Environment}-stack-pipeline
       RoleArn: !GetAtt CodePipelineRole.Arn
       ArtifactStore:
         Type: S3
@@ -233,28 +250,36 @@ Resources:
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
                 ParameterOverrides: !Sub |
                   {
-                    "VpcCidr"   : "${VpcCidr}",
-                    "PublicSubnetCidr1"           : "${PublicSubnetCidr1}",
+                    "VpcCidr"                   : "${VpcCidr}",
+                    "PublicSubnetCidr1"         : "${PublicSubnetCidr1}",
                     "PublicSubnetCidr2"         : "${PublicSubnetCidr2}",
-                    "PrivateSubnetCidr1"           : "${PrivateSubnetCidr1}",
-                    "PrivateSubnetCidr2"         : "${PrivateSubnetCidr2}",
-                    "ConnectionArn"       : "${ConnectionArn}",
-                    "CodePipelineBucket"         : "${CodePipelineBucket}",
-                    "RepositoryUsername"       : "${RepositoryUsername}",
-                    "BackendRepositoryName"  : "${BackendRepositoryName}",
-                    "FrontendRepositoryName"           : "${FrontendRepositoryName}",
-                    "GitHubBranch"         : "${GitHubBranch}",
-                    "InstanceType"              : "${InstanceType}"
-                    "PORT"          : "${PORT}"
-                    "DBCredentialsSecret"          : "${DBCredentialsSecret}"
-                    "KeyName"          : "${KeyName}"
-                    "AlarmEmail"          : "${AlarmEmail}"
-                    "NestedStackTemplateBucket"          : "${NestedStackTemplateBucket}"
-                    "IsSetupPrivateSubnet"          : "${IsSetupPrivateSubnet}"
-                    "AppName"          : "${AppName}"
-                    "Environment"          : "${Environment}"
+                    "PrivateSubnetCidr1"        : "${PrivateSubnetCidr1}",
+                    "PrivateSubnetCidr2"        : "${PrivateSubnetCidr2}",
+                    "ConnectionArn"             : "${ConnectionArn}",
+                    "CodePipelineBucket"        : "${CodePipelineBucket}",
+                    "RepositoryUsername"        : "${RepositoryUsername}",
+                    "BackendRepositoryName"     : "${BackendRepositoryName}",
+                    "FrontendRepositoryName"    : "${FrontendRepositoryName}",
+                    "GitHubBranch"              : "${GitHubBranch}",
+                    "InstanceType"              : "${InstanceType}",
+                    "PORT"                      : "${PORT}",
+                    "DBCredentialsSecret"       : "${DBCredentialsSecret}",
+                    "KeyName"                   : "${KeyName}",
+                    "AlarmEmail"                : "${AlarmEmail}",
+                    "NestedStackTemplateBucket" : "${NestedStackTemplateBucket}",
+                    "IsSetupPrivateSubnet"      : "${IsSetupPrivateSubnet}",
+                    "AppName"                   : "${AppName}",
+                    "Environment"               : "${Environment}"
                   }
               RunOrder: 2
+
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-${Environment}-stack-pipeline
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
 
 ## Stack Outputs ##
 Outputs:

@@ -65,6 +65,13 @@ Resources:
       Cache:
         Type: NO_CACHE
       TimeoutInMinutes: 20
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-fe-codebuild"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## Build Project for CloudFront Invalidation ##
   CloudFrontInvalidationProject:
@@ -91,6 +98,13 @@ Resources:
                 - echo "Invalidating CloudFront cache..."
                 - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths "/*"
       TimeoutInMinutes: 10
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-fe-codebuild-cf-invalidation"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
   ## Code Pipeline for React App ##
   ReactPipeline:
@@ -166,6 +180,13 @@ Resources:
               Configuration:
                 ProjectName: !Ref CloudFrontInvalidationProject
               RunOrder: 2
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-fe-pipeline"
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
 
 ## Stack Outputs ##
 Outputs:
