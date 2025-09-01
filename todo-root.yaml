@@ -55,7 +55,7 @@ Parameters:
     Description: Email address to receive CloudWatch alarms
   IsSetupPrivateSubnet:
     Type: String
-    Default: false
+    Default: true
     AllowedValues:
       - true
       - false

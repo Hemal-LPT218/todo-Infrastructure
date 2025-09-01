@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "CloudWatch Monitoring for ALB, EC2 (ASG), and RDS Aurora"
 
+## Stack Parameters ##
 Parameters:
   AlarmEmail:
     Type: String
@@ -15,10 +16,9 @@ Parameters:
     Type: String
     Description: ALB logical ID
 
+## Stack Resources ##
 Resources:
-  ##########################################
-  # SNS Topic for Alarms
-  ##########################################
+  ## SNS Topic ##
   AlarmSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -27,9 +27,7 @@ Resources:
         - Endpoint: !Ref AlarmEmail
           Protocol: email
 
-  ##########################################
-  # CloudWatch Log Groups
-  ##########################################
+  ## CloudWatch Log Groups ##
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -48,10 +46,7 @@ Resources:
       LogGroupName: "/rds/aurora-mysql"
       RetentionInDays: 7
 
-  ##########################################
-  # CloudWatch Alarms
-  ##########################################
-  # EC2 High CPU Alarm (applies to all instances in ASG)
+  ## CloudWatch Alarms ##
   EC2HighCPUAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -72,7 +67,6 @@ Resources:
       OKActions:
         - !Ref AlarmSNSTopic
 
-  # RDS High CPU Alarm
   RDSHighCPUAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -93,7 +87,6 @@ Resources:
       OKActions:
         - !Ref AlarmSNSTopic
 
-  # ALB 5XX Errors Alarm
   ALB5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -114,9 +107,7 @@ Resources:
       OKActions:
         - !Ref AlarmSNSTopic
 
-  ##########################################
-  # CloudWatch Dashboard
-  ##########################################
+  ## CloudWatch Dashboard ##
   MonitoringDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
@@ -167,6 +158,7 @@ Resources:
           ]
         }
 
+## Stack Outputs ##
 Outputs:
   DashboardName:
     Description: "CloudWatch Dashboard Name"
