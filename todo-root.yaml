@@ -288,7 +288,7 @@ Resources:
       Parameters:
         VpcId: !GetAtt VpcStack.Outputs.VpcId
         SecuritySSHGroupId: !GetAtt SecurityGroupStack.Outputs.BastionSecurityGroupId
-        SubnetId: !GetAtt VpcStack.Outputs.PublicSubnetId1
+        PublicSubnetId: !GetAtt VpcStack.Outputs.PublicSubnetId1
         AppName: !Ref AppName
         Environment: !Ref Environment
       Tags:
