@@ -9,6 +9,9 @@ Parameters:
   SecuritySSHGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Security group ID for SSH
+  PublicSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for EC2
   AppName:
     Type: String
     Description: Application name
@@ -36,7 +39,7 @@ Resources:
       ImageId: !FindInMap [RegionMap, !Ref AWS::Region, AMI]
       InstanceName: !Sub "${AppName}-${Environment}-bastion-ec2"
       InstanceType: t2.micro
-      VpcId: !Ref VpcId
+      SubnetId: !Ref PublicSubnetId
       SecurityGroupIds:
         - !Ref SecuritySSHGroupId
       KeyName: !Ref AppName
