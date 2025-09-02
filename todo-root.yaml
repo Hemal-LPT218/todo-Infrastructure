@@ -281,6 +281,23 @@ Resources:
         - Key: Application
           Value: !Ref AppName
 
+  BastionHostStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-bastion-host.yaml"
+      Parameters:
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+        SecuritySSHGroupId: !GetAtt SecurityGroupStack.Outputs.BastionSecurityGroupId
+        AppName: !Ref AppName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-stack-bastion-host"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
+
 ## Stack Conditions ##
 Conditions:
   CreatePrivateSubnet: !Equals [!Ref IsSetupPrivateSubnet, "true"]

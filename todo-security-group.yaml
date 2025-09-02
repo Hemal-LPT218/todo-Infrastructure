@@ -48,7 +48,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 0.0.0.0/0
+          SecurityGroupId: !Ref BastionSecurityGroup
       Tags:
         - Key: Name
           Value: !Sub "${AppName}-${Environment}-ssh-sg"
@@ -102,6 +102,25 @@ Resources:
         - Key: Application
           Value: !Ref AppName
 
+  ## Security Group for Bastion host ##
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Allow SSH access on ${AppName}-${Environment} Bastion host"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-bastion-sg"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
+
 ## Stack Outputs ##
 Outputs:
   SecuritySSHGroupId:
@@ -116,3 +135,6 @@ Outputs:
   ALBSecurityGroupId:
     Description: ALB security group ID
     Value: !Ref ALBSecurityGroup
+  BastionSecurityGroupId:
+    Description: Bastion security group ID
+    Value: !Ref BastionSecurityGroup

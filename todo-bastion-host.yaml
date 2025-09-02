@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "AWS template for a bastion host"
+
+## Stack Parameters ##
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for ALB/EC2
+  SecuritySSHGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group ID for SSH
+  AppName:
+    Type: String
+    Description: Application name
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+## Stack Mappings ##
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0de716d6197524dd9
+    ap-south-1:
+      AMI: ami-0144277607031eca2
+
+## Stack Resources ##
+Resources:
+  BastionHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref AWS::Region, AMI]
+      InstanceName: !Sub "${AppName}-${Environment}-bastion-ec2"
+      InstanceType: t2.micro
+      VpcId: !Ref VpcId
+      SecurityGroupIds:
+        - !Ref SecuritySSHGroupId
+      KeyName: !Ref AppName
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-${Environment}-bastion-ec2"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref AppName
