@@ -37,12 +37,10 @@ Resources:
     Type: AWS::EC2::Instance
     Properties:
       ImageId: !FindInMap [RegionMap, !Ref AWS::Region, AMI]
-      InstanceName: !Sub "${AppName}-${Environment}-bastion-ec2"
       InstanceType: t2.micro
       SubnetId: !Ref PublicSubnetId
       SecurityGroupIds:
         - !Ref SecuritySSHGroupId
-      KeyName: !Ref AppName
       Tags:
         - Key: Name
           Value: !Sub "${AppName}-${Environment}-bastion-ec2"
