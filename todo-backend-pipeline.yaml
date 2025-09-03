@@ -277,6 +277,18 @@ Resources:
           Value: !Ref Environment
           PropagateAtLaunch: true
 
+  ## Target Tracking Scaling Policy ##
+  CPUPolicyTargetTracking:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AppAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50.0 # Maintain average CPU at ~50%
+      Cooldown: 300 # Applies to both scale in and scale out
+
   ## CodeDeploy ##
   CodeDeployApp:
     Type: AWS::CodeDeploy::Application
