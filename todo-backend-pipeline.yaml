@@ -139,25 +139,25 @@ Resources:
             yum install -y jq awscli
 
             # Fetch secret from Secrets Manager
-            SECRET_JSON=$(aws secretsmanager get-secret-value \
-              --secret-id ${DBCredentialsSecret} \
-              --query SecretString \
-              --output text \
-              --region ${AWS::Region})
+            # SECRET_JSON=$(aws secretsmanager get-secret-value \
+            #   --secret-id ${DBCredentialsSecret} \
+            #   --query SecretString \
+            #   --output text \
+            #   --region ${AWS::Region})
 
-            DB_USER=$(echo $SECRET_JSON | jq -r .username)
-            DB_PASS=$(echo $SECRET_JSON | jq -r .password)
+            # DB_USER=$(echo $SECRET_JSON | jq -r .username)
+            # DB_PASS=$(echo $SECRET_JSON | jq -r .password)
 
-            # Create .env for DB testing
-            cat <<EOF > /home/ec2-user/app/.env
-            NODE_ENV=development
-            DATABASE_URL=mysql://$DB_USER:$DB_PASS@${DBEndpoint}:3306/${DBName}
-            PORT=${PORT}
-            EOF
+            # # Create .env for DB testing
+            # cat <<EOF > /home/ec2-user/app/.env
+            # NODE_ENV=development
+            # DATABASE_URL=mysql://$DB_USER:$DB_PASS@${DBEndpoint}:3306/${DBName}
+            # PORT=${PORT}
+            # EOF
 
             # Set permissions
             chown -R ec2-user:ec2-user /home/ec2-user/app
-            chmod 600 /home/ec2-user/app/.env
+            # chmod 600 /home/ec2-user/app/.env
 
             # Install CloudWatch Agent
             yum install -y amazon-cloudwatch-agent
@@ -342,6 +342,17 @@ Resources:
         Image: aws/codebuild/standard:6.0
         ComputeType: BUILD_GENERAL1_SMALL
         ImagePullCredentialsType: CODEBUILD
+        EnvironmentVariables:
+          - Name: DBCredentialsSecret
+            Value: !Ref DBCredentialsSecret
+          - Name: Region
+            Value: !Ref AWS::Region
+          - Name: DBEndpoint
+            Value: !Ref DBEndpoint
+          - Name: DBName
+            Value: !Ref DBName
+          - Name: PORT
+            Value: !Ref PORT
       Artifacts:
         Type: CODEPIPELINE
       TimeoutInMinutes: 15

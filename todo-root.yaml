@@ -140,7 +140,7 @@ Resources:
   RdsStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/todo-rds.yaml"
+      TemplateURL: !Sub "https://${NestedStackTemplateBucket}.s3.amazonaws.com/temp-rds.yaml"
       Parameters:
         Subnet1: !If
           - CreatePrivateSubnet
@@ -209,6 +209,7 @@ Resources:
         CodeDeployRoleArn: !GetAtt RolesStack.Outputs.CodeDeployRoleArn
         CodeBuildRoleArn: !GetAtt RolesStack.Outputs.CodeBuildRoleArn
         CodePipelineRoleArn: !GetAtt RolesStack.Outputs.CodePipelineRoleArn
+        CodePipelineBucket: !Ref CodePipelineBucket
         PORT: !Ref PORT
         DBCredentialsSecret: !Ref DBCredentialsSecret
         KeyName: !Ref KeyName
