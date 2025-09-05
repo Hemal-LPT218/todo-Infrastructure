@@ -40,6 +40,18 @@ Parameters:
     Default: arn:aws:secretsmanager:us-east-1:730335183789:secret:todo-db-credentials-r50p22
     Description: ARN of the secret
 
+  AppName:
+    Type: String
+    Description: Application name (injected from root stack)
+
+  Environment:
+    Type: String
+    Description: Deployment environment (e.g., dev, staging, prod)
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
 Resources:
   # TodoDBSecurityGroup:
   #   Type: AWS::EC2::SecurityGroup
